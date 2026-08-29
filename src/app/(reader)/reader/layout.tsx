@@ -4,6 +4,11 @@ import { ReaderShell } from "@/components/layout/reader-shell";
 
 export const metadata: Metadata = {
   title: "Reader",
+  appleWebApp: {
+    capable: true,
+    title: "VTI Reader",
+    statusBarStyle: "default",
+  },
 };
 
 export default function ReaderLayout({

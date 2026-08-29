@@ -1,35 +1,50 @@
-import Link from "next/link";
+"use client";
+
+import { use } from "react";
 import { notFound } from "next/navigation";
-import { DemoBanner } from "@/components/demo/demo-banner";
 import { Section } from "@/components/data/section";
-import { TableWrap, Td, Th } from "@/components/data/table";
+import { AdminTable } from "@/components/data/table";
 import { StatusBadge } from "@/components/status/status-badge";
+import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
+import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button-link";
 import { PageHeader } from "@/components/ui/page-header";
-import { catalog } from "@/data/catalog";
-import { expenseReportView } from "@/data/queries";
+import { useToast } from "@/components/ui/toast";
 import { formatMoney, formatShortDate } from "@/lib/format";
 
-export function generateStaticParams() {
-  return catalog.expenseReports.map((item) => ({ id: item.id }));
-}
-
-export default async function AdminExpenseDetailPage({
+export default function AdminExpenseDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
+  const { id } = use(params);
+  const { catalog, queries, reviewExpense, ready } = useOperations();
+  const { notify } = useToast();
   const report = catalog.expenseReports.find((item) => item.id === id);
-  if (!report) notFound();
-  const view = expenseReportView(report);
+  if (!report) {
+    if (!ready) return <RecordPending />;
+    notFound();
+  }
+  const view = queries.expenseReportView(report);
 
   return (
-    <div className="grid gap-6">
+    <div className="app-page">
       <PageHeader
         title="Expense report"
-        description={`${view.reader?.contractorName ?? "Reader"} · ${view.event?.name ?? "Assignment"}`}
+        description={`${view.reader?.contractorName ?? "Reader"} · ${view.event?.name ?? "Assignment"}. Reimbursement is separate from assignment compensation.`}
+        breadcrumbs={[
+          { href: "/admin", label: "Dashboard" },
+          { href: "/admin/expenses", label: "Expenses" },
+          { label: "Report" },
+        ]}
+        actions={
+          view.assignment ? (
+            <ButtonLink href={`/admin/assignments/${view.assignment.id}`}>Open assignment</ButtonLink>
+          ) : undefined
+        }
       />
-      <DemoBanner>Receipt images are represented by labels only. No files are stored in this prototype.</DemoBanner>
+
       <div className="flex flex-wrap gap-2">
         <StatusBadge kind="expense" value={view.report.status} />
         {view.reimbursement ? <StatusBadge kind="pay" value={view.reimbursement.status} /> : null}
@@ -43,37 +58,56 @@ export default async function AdminExpenseDetailPage({
             ? " · awaiting Chester"
             : ""}
       </p>
+
       <Section title="Lines">
-        <TableWrap>
-          <thead>
-            <tr>
-              <Th>Date</Th>
-              <Th>Category</Th>
-              <Th>Description</Th>
-              <Th>Receipt</Th>
-              <Th>Amount</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.lines.map((line) => (
-              <tr key={line.id}>
-                <Td>{formatShortDate(line.incurredOn)}</Td>
-                <Td>{line.category}</Td>
-                <Td>{line.description}</Td>
-                <Td className="text-ink-muted">{line.receiptLabel ?? "No image in demo"}</Td>
-                <Td className="tabular-nums">{formatMoney(line.amountCents)}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+        <AdminTable
+          columns={[
+            { key: "date", header: "Date" },
+            { key: "category", header: "Category" },
+            { key: "description", header: "Description" },
+            { key: "receipt", header: "Receipt" },
+            { key: "amount", header: "Amount" },
+          ]}
+          rows={view.lines.map((line) => ({
+            id: line.id,
+            title: line.description,
+            subtitle: `${formatShortDate(line.incurredOn)} · ${line.category}`,
+            trailing: formatMoney(line.amountCents),
+            cells: {
+              date: formatShortDate(line.incurredOn),
+              category: line.category,
+              description: line.description,
+              receipt: line.receiptLabel ?? "On file with the reader",
+              amount: <span className="tabular-nums">{formatMoney(line.amountCents)}</span>,
+            },
+          }))}
+        />
         <p className="mt-3 text-sm font-medium">Total {formatMoney(view.totalCents)}</p>
       </Section>
-      {view.assignment ? (
-        <p className="text-sm">
-          <Link href={`/admin/assignments/${view.assignment.id}`} className="underline-offset-2 hover:underline">
-            Open assignment
-          </Link>
-        </p>
+
+      {view.report.status === "submitted" ? (
+        <div className="flex flex-wrap gap-2">
+          <Button
+            onClick={() => {
+              reviewExpense(view.report.id, "approved");
+              notify({
+                title: "Expense approved.",
+                message: "Reimbursement still needs Chester’s payment approval on Payments.",
+              });
+            }}
+          >
+            Approve expense
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              reviewExpense(view.report.id, "rejected");
+              notify({ title: "Expense returned." });
+            }}
+          >
+            Return to reader
+          </Button>
+        </div>
       ) : null}
     </div>
   );

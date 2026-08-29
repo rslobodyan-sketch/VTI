@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Source_Serif_4 } from "next/font/google";
 import { AppProviders } from "@/components/providers";
+import { RegisterServiceWorker } from "@/components/pwa/register-service-worker";
 import "./globals.css";
 
 const ui = IBM_Plex_Sans({
@@ -29,8 +30,24 @@ export const metadata: Metadata = {
     default: "VTI Operations",
     template: "%s · VTI Operations",
   },
-  description:
-    "Voice Talent International operations prototype. Demo catalog — not live records.",
+  description: "Voice Talent International operations — inquiry through payment tracking.",
+  applicationName: "VTI Operations",
+  appleWebApp: {
+    capable: true,
+    title: "VTI Reader",
+    statusBarStyle: "default",
+  },
+  formatDetection: { telephone: false },
+  other: {
+    "mobile-web-app-capable": "yes",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1e3b34",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -43,7 +60,10 @@ export default function RootLayout({
       <body
         className={`${ui.variable} ${display.variable} ${numeric.variable} antialiased`}
       >
-        <AppProviders>{children}</AppProviders>
+        <AppProviders>
+          <RegisterServiceWorker />
+          {children}
+        </AppProviders>
       </body>
     </html>
   );

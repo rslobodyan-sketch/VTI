@@ -1,96 +1,100 @@
-import Link from "next/link";
+"use client";
+
+import { use } from "react";
 import { notFound } from "next/navigation";
-import { DemoBanner } from "@/components/demo/demo-banner";
 import { Section } from "@/components/data/section";
-import { TableWrap, Td, Th } from "@/components/data/table";
+import { AdminTable } from "@/components/data/table";
 import { StatusBadge } from "@/components/status/status-badge";
+import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
+import { ButtonLink } from "@/components/ui/button-link";
+import { FactGrid } from "@/components/ui/fact-grid";
 import { PageHeader } from "@/components/ui/page-header";
-import { catalog } from "@/data/catalog";
-import {
-  assignmentView,
-  assignmentsForReader,
-  compensationForReader,
-  documentsForReader,
-  getEvent,
-  getReader,
-} from "@/data/queries";
+import { TextLink } from "@/components/ui/text-link";
 import { formatMoney, formatShortDate } from "@/lib/format";
 
-export function generateStaticParams() {
-  return catalog.readers.map((item) => ({ id: item.id }));
-}
-
-export default async function AdminReaderDetailPage({
+export default function AdminReaderDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const reader = getReader(id);
-  if (!reader) notFound();
+  const { id } = use(params);
+  const { catalog, queries, ready } = useOperations();
+  const reader = queries.getReader(id);
+  if (!reader) {
+    if (!ready) return <RecordPending />;
+    notFound();
+  }
 
-  const jobs = assignmentsForReader(reader.id)
-    .map(assignmentView)
+  const jobs = queries
+    .assignmentsForReader(reader.id)
+    .map(queries.assignmentView)
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
-  const docs = documentsForReader(reader.id);
-  const pay = compensationForReader(reader.id);
+  const docs = queries.documentsForReader(reader.id);
+  const pay = queries.compensationForReader(reader.id);
   const address = catalog.addresses.find((item) => item.readerId === reader.id && item.kind === "primary");
   const emergency = catalog.emergencyContacts.find((item) => item.readerId === reader.id);
   const block = catalog.availability.find((item) => item.readerId === reader.id);
+  const nextJob = jobs[0];
 
   return (
-    <div className="grid gap-8">
+    <div className="app-page">
       <PageHeader
         title={reader.contractorName}
-        description={reader.notes}
+        description={`${reader.notes} Legal entity and masked tax ID are visible to admin. Raw SSN, driver-license images, and bank numbers are not in this catalog.`}
+        breadcrumbs={[
+          { href: "/admin", label: "Dashboard" },
+          { href: "/admin/readers", label: "Readers" },
+          { label: reader.contractorName },
+        ]}
+        actions={
+          nextJob ? (
+            <ButtonLink href={`/admin/assignments/${nextJob.id}`}>Open assignment</ButtonLink>
+          ) : undefined
+        }
       />
-      <DemoBanner>
-        Legal entity and masked tax ID are visible to admin. Raw SSN, driver-license images, and bank numbers are not in this catalog.
-      </DemoBanner>
 
-      <dl className="grid gap-4 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-ink-faint">Onboarding</dt>
-          <dd>
-            <StatusBadge kind="onboarding" value={reader.onboardingStatus} />
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-faint">NDA</dt>
-          <dd>
-            {reader.ndaSigned
+      <FactGrid
+        items={[
+          {
+            label: "Onboarding",
+            value: <StatusBadge kind="onboarding" value={reader.onboardingStatus} />,
+          },
+          {
+            label: "NDA",
+            value: reader.ndaSigned
               ? `Signed ${reader.ndaSignedAt ? formatShortDate(reader.ndaSignedAt) : ""}`
-              : "Not signed"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-faint">First-choice / veteran</dt>
-          <dd>
-            {reader.firstChoiceEligible ? "First-choice eligible" : "Building tenure"}
-            {reader.veteranStatus ? " · veteran" : ""}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-faint">Entity</dt>
-          <dd>
-            {reader.legalName} · {reader.businessType} · {reader.taxIdType} {reader.taxIdMasked}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-faint">Contact</dt>
-          <dd>
-            {reader.email}
-            <br />
-            {reader.primaryPhone}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-ink-faint">Travel prefs</dt>
-          <dd>
-            {reader.airlinePreference} · {reader.seatPreference} · shirt {reader.shirtSize}
-          </dd>
-        </div>
-      </dl>
+              : "Not signed",
+          },
+          {
+            label: "First-choice / veteran",
+            value: (
+              <>
+                {reader.firstChoiceEligible ? "First-choice eligible" : "Building tenure"}
+                {reader.veteranStatus ? " · veteran" : ""}
+              </>
+            ),
+          },
+          {
+            label: "Entity",
+            value: `${reader.legalName} · ${reader.businessType} · ${reader.taxIdType} ${reader.taxIdMasked}`,
+          },
+          {
+            label: "Contact",
+            value: (
+              <>
+                {reader.email}
+                <br />
+                {reader.primaryPhone}
+              </>
+            ),
+          },
+          {
+            label: "Travel prefs",
+            value: `${reader.airlinePreference} · ${reader.seatPreference} · shirt ${reader.shirtSize}`,
+          },
+        ]}
+      />
 
       <Section title="Sound and geography (assignment support)">
         <p className="text-sm">{reader.soundNotes}</p>
@@ -103,10 +107,13 @@ export default async function AdminReaderDetailPage({
       <Section title="Availability">
         {block ? (
           <p className="text-sm">
-            Unavailable {formatShortDate(block.startsAt)} – {formatShortDate(block.endsAt)}. {block.notes}
+            Unavailable {formatShortDate(block.startsAt)} – {formatShortDate(block.endsAt)}.{" "}
+            {block.notes}
           </p>
         ) : (
-          <p className="text-sm text-ink-muted">No unavailable block on file. Admin-entered only in this prototype.</p>
+          <p className="text-sm text-ink-muted">
+            No unavailable block on file. Availability is admin-entered until Chester confirms otherwise.
+          </p>
         )}
       </Section>
 
@@ -137,53 +144,53 @@ export default async function AdminReaderDetailPage({
       ) : null}
 
       <Section title="Assignments">
-        <TableWrap>
-          <thead>
-            <tr>
-              <Th>Event</Th>
-              <Th>Role</Th>
-              <Th>Status</Th>
-              <Th>Promised</Th>
-            </tr>
-          </thead>
-          <tbody>
-            {jobs.map((item) => (
-              <tr key={item.id}>
-                <Td>
-                  <Link href={`/admin/assignments/${item.id}`} className="underline-offset-2 hover:underline">
-                    {item.event.name}
-                  </Link>
-                </Td>
-                <Td>{item.role}</Td>
-                <Td>
-                  <StatusBadge kind="assignment" value={item.status} />
-                </Td>
-                <Td className="tabular-nums">{formatMoney(item.promisedPayCents)}</Td>
-              </tr>
-            ))}
-          </tbody>
-        </TableWrap>
+        <AdminTable
+          columns={[
+            { key: "event", header: "Event" },
+            { key: "role", header: "Role" },
+            { key: "status", header: "Status" },
+            { key: "promised", header: "Promised" },
+          ]}
+          rows={jobs.map((item) => ({
+            id: item.id,
+            href: `/admin/assignments/${item.id}`,
+            title: item.event.name,
+            subtitle: item.role,
+            trailing: <StatusBadge kind="assignment" value={item.status} />,
+            cells: {
+              event: (
+                <TextLink href={`/admin/assignments/${item.id}`}>{item.event.name}</TextLink>
+              ),
+              role: item.role,
+              status: <StatusBadge kind="assignment" value={item.status} />,
+              promised: <span className="tabular-nums">{formatMoney(item.promisedPayCents)}</span>,
+            },
+          }))}
+        />
       </Section>
 
       <Section title="Compensation (this reader only)">
-        <ul className="grid gap-2 text-sm">
-          {pay.map((row) => {
-            const event = getEvent(
-              catalog.assignments.find((item) => item.id === row.assignmentId)?.eventId ?? "",
-            );
-            return (
-              <li key={row.id} className="flex justify-between gap-3">
-                <span>
-                  {event?.name} · {row.kind}
-                </span>
-                <span>
-                  {formatMoney(row.amountCents)}{" "}
-                  <StatusBadge kind="pay" value={row.status} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {pay.length ? (
+          <ul className="grid gap-2 text-sm">
+            {pay.map((row) => {
+              const event = queries.getEvent(
+                catalog.assignments.find((item) => item.id === row.assignmentId)?.eventId ?? "",
+              );
+              return (
+                <li key={row.id} className="flex justify-between gap-3">
+                  <span>
+                    {event?.name} · {row.kind}
+                  </span>
+                  <span>
+                    {formatMoney(row.amountCents)} <StatusBadge kind="pay" value={row.status} />
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-muted">No compensation rows on this reader.</p>
+        )}
       </Section>
     </div>
   );

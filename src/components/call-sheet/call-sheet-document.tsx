@@ -34,45 +34,60 @@ export function CallSheetDocument({
   viewerReaderId,
 }: CallSheetDocumentProps) {
   const own = assignments.find((item) => item.reader.id === viewerReaderId);
+  const first = ceremonies[0];
+  const last = ceremonies[ceremonies.length - 1];
+  const outstanding = assignments.filter((item) => !item.acknowledged);
+  const issued = callSheet.status === "issued";
 
   return (
-    <article className="border border-line bg-paper-raised px-5 py-6 sm:px-8">
-      <p className="text-[0.7rem] tracking-[0.14em] text-ink-faint uppercase">
-        Voice Talent International · Call Sheet
-      </p>
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="font-serif text-2xl font-semibold">{event.name}</h2>
-          <p className="text-sm text-ink-muted">{universityName}</p>
+    <article className="call-sheet-doc border border-line bg-paper-raised px-5 py-6 sm:px-8">
+      <header className="border-b border-line pb-4">
+        <p className="app-kicker">Voice Talent International · Assignment packet</p>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="font-serif text-2xl font-semibold tracking-tight">{event.name}</h2>
+            <p className="text-sm text-ink-muted">{universityName}</p>
+          </div>
+          <div className="text-right text-sm">
+            <StatusBadge kind="callsheet" value={callSheet.status} />
+            <p className="mt-1 font-medium tabular-nums">Version {callSheet.version}</p>
+            {callSheet.issuedAt ? (
+              <p className="text-ink-muted">Issued {formatDateTime(callSheet.issuedAt)}</p>
+            ) : (
+              <p className="text-ink-muted">Not issued</p>
+            )}
+          </div>
         </div>
-        <div className="text-right text-sm">
-          <StatusBadge kind="callsheet" value={callSheet.status} />
-          <p className="mt-1 text-ink-muted">Version {callSheet.version}</p>
-        </div>
-      </div>
+      </header>
 
-      <dl className="mt-6 grid gap-3 border-y border-line py-4 text-sm sm:grid-cols-2">
+      <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">
         <div>
-          <dt className="text-ink-faint">Talent</dt>
-          <dd>{callSheet.talentSummary}</dd>
+          <dt>Event</dt>
+          <dd>{event.name}</dd>
         </div>
         <div>
-          <dt className="text-ink-faint">Contacts</dt>
-          <dd>{callSheet.contactsSnapshot}</dd>
+          <dt>Date</dt>
+          <dd>
+            {first ? formatDateTime(first.startsAt) : "—"}
+            {last && first && last.startsAt !== first.startsAt ? (
+              <span className="block text-ink-muted">through {formatDateTime(last.startsAt)}</span>
+            ) : null}
+          </dd>
+        </div>
+        <div>
+          <dt>Location</dt>
+          <dd>{first?.venueName ?? "See schedule"}</dd>
         </div>
       </dl>
 
-      <section className="mt-5">
-        <h3 className="text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase">
-          Ceremony schedule
-        </h3>
-        <ul className="mt-2 grid gap-2 text-sm">
+      <section className="mt-6">
+        <h3 className="app-kicker">Schedule</h3>
+        <ul className="mt-2 grid gap-3 text-sm">
           {ceremonies.map((ceremony) => (
-            <li key={`${ceremony.name}-${ceremony.startsAt}`}>
+            <li key={`${ceremony.name}-${ceremony.startsAt}`} className="border-l-2 border-line pl-3">
               <span className="font-medium">{ceremony.name}</span>
-              <span className="text-ink-muted">
-                {" "}
-                · {formatDateTime(ceremony.startsAt)} · {ceremony.venueName}
+              <span className="block text-ink-muted">
+                {formatDateTime(ceremony.startsAt)} · {ceremony.venueName}
               </span>
               {ceremony.callTime ? (
                 <span className="block text-ink-muted">
@@ -87,17 +102,54 @@ export function CallSheetDocument({
         </ul>
       </section>
 
-      <section className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
+      <section className="mt-6 text-sm">
+        <h3 className="app-kicker">Reader assignment</h3>
+        {viewer === "reader" && own ? (
+          <p className="mt-2">
+            <span className="font-medium">{own.reader.contractorName}</span>
+            <span className="text-ink-muted"> · {own.assignment.role}</span>
+            <span className="block text-ink-muted">
+              {own.acknowledged
+                ? `Acknowledged version ${callSheet.version}`
+                : issued
+                  ? "Acknowledgement outstanding"
+                  : "No acknowledgement required on this version"}
+            </span>
+          </p>
+        ) : (
+          <ul className="mt-2 grid gap-1.5">
+            {assignments.map((item) => (
+              <li key={item.assignment.id}>
+                <Link href={`/admin/readers/${item.reader.id}`} className="app-link">
+                  {item.reader.contractorName}
+                </Link>
+                <span className="text-ink-muted"> · {item.assignment.role}</span>
+                <span className="text-ink-muted">
+                  {item.acknowledged
+                    ? ` · acknowledged v${callSheet.version}`
+                    : issued
+                      ? " · acknowledgement outstanding"
+                      : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="mt-3 text-ink-muted">{callSheet.talentSummary}</p>
+        <p className="mt-1 text-ink-muted">{callSheet.contactsSnapshot}</p>
+      </section>
+
+      <section className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
         <p>
-          <span className="block text-ink-faint">Travel</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Travel</span>
           {callSheet.travelNotes}
         </p>
         <p>
-          <span className="block text-ink-faint">Airfare</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Airfare</span>
           {callSheet.airfareNotes}
         </p>
         <p>
-          <span className="block text-ink-faint">Lodging</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Lodging</span>
           {callSheet.accommodationNotes}
           {callSheet.hotelEstimateCents ? (
             <span className="block text-ink-muted">
@@ -106,23 +158,23 @@ export function CallSheetDocument({
           ) : null}
         </p>
         <p>
-          <span className="block text-ink-faint">Transfers / rideshare</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">
+            Transfers / rideshare
+          </span>
           {callSheet.transferRideshareNotes}
         </p>
         <p>
-          <span className="block text-ink-faint">Per diem</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Per diem</span>
           {formatMoney(callSheet.perDiemCents)} per day
         </p>
         <p>
-          <span className="block text-ink-faint">Parking</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Parking</span>
           {callSheet.parkingNotes}
         </p>
       </section>
 
-      <section className="mt-5 text-sm">
-        <h3 className="text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase">
-          Compensation
-        </h3>
+      <section className="mt-6 text-sm">
+        <h3 className="app-kicker">Compensation</h3>
         {viewer === "reader" && own ? (
           <p className="mt-2">
             Promised for this assignment:{" "}
@@ -133,55 +185,80 @@ export function CallSheetDocument({
                 · last year {formatMoney(own.assignment.priorYearPayCents)}
               </span>
             ) : null}
+            <span className="mt-1 block text-xs text-ink-faint">
+              Other readers’ compensation is never shown on this packet.
+            </span>
           </p>
         ) : (
           <ul className="mt-2 grid gap-1">
             {assignments.map((item) => (
               <li key={item.assignment.id}>
-                <Link href={`/admin/readers/${item.reader.id}`} className="underline-offset-2 hover:underline">
-                  {item.reader.contractorName}
-                </Link>
+                {item.reader.contractorName}
                 <span className="text-ink-muted"> · {item.assignment.role} · </span>
                 {formatMoney(item.assignment.promisedPayCents)}
-                <span className="text-ink-muted">
-                  {item.acknowledged ? " · accepted v" + callSheet.version : " · acknowledgement outstanding"}
-                </span>
               </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="mt-5 grid gap-4 text-sm">
+      <section className="mt-6 grid gap-4 text-sm">
+        <h3 className="app-kicker">Instructions</h3>
         <p>
-          <span className="block text-ink-faint">Task instructions</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">
+            Task instructions
+          </span>
           {callSheet.taskInstructions}
         </p>
         <p>
-          <span className="block text-ink-faint">Preparation</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">
+            University materials / preparation
+          </span>
           {callSheet.preparationRequirements}
         </p>
         <p>
-          <span className="block text-ink-faint">Dress code</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Dress code</span>
           {callSheet.dressCode}
         </p>
         <p>
-          <span className="block text-ink-faint">Error-rate expectations</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">
+            Error-rate expectations
+          </span>
           {callSheet.errorRateExpectations}
         </p>
         <p>
-          <span className="block text-ink-faint">Expense rules</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Expense rules</span>
           {callSheet.expenseRules}
         </p>
         <p>
-          <span className="block text-ink-faint">Debrief</span>
+          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Debrief</span>
           {callSheet.debriefInstructions}
         </p>
-        <p className="border-t border-line pt-4 text-ink-muted">
-          <span className="block text-ink-faint">Confidentiality / acknowledgement</span>
-          {callSheet.confidentialityLegalText}
-        </p>
       </section>
+
+      <footer className="mt-6 border-t border-line pt-4 text-sm">
+        <h3 className="app-kicker">Confidentiality and acknowledgement</h3>
+        <p className="mt-2 text-ink-muted">{callSheet.confidentialityLegalText}</p>
+        {viewer === "admin" ? (
+          <p className="mt-3">
+            Acknowledgement:{" "}
+            {issued
+              ? outstanding.length
+                ? `${outstanding.length} outstanding on v${callSheet.version}`
+                : `All assigned readers acknowledged v${callSheet.version}`
+              : "Not required on a superseded or unissued version"}
+          </p>
+        ) : own ? (
+          <p className="mt-3">
+            Your acknowledgement:{" "}
+            {own.acknowledged
+              ? `accepted version ${callSheet.version}`
+              : issued
+                ? "not yet accepted"
+                : "n/a on this version"}
+          </p>
+        ) : null}
+      </footer>
     </article>
   );
 }

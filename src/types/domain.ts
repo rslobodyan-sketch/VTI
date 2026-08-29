@@ -146,6 +146,8 @@ export type ClientContact = {
   department: string;
   roleTitle: string;
   isPrimary: boolean;
+  preferredContactMethod?: string;
+  notes?: string;
 };
 
 export type Inquiry = {
@@ -161,6 +163,12 @@ export type Inquiry = {
   notes: string;
   nextAction: string;
   nextActionAt?: string;
+  ownerName?: string;
+  eventType?: string;
+  expectedEventDate?: string;
+  estimatedReaderCount?: number;
+  estimatedValueCents?: number;
+  lastActivityAt?: string;
 };
 
 export type EventRecord = {

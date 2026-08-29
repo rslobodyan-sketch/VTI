@@ -1,27 +1,32 @@
 "use client";
 
-import { DemoAction } from "@/components/demo/demo-action";
-import { DemoBanner } from "@/components/demo/demo-banner";
 import { useDemoReader } from "@/components/demo/demo-reader";
+import { useOperations } from "@/components/operations/operations-store";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Field } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
-import { catalog } from "@/data/catalog";
-import { assignmentView, assignmentsForReader, getEvent } from "@/data/queries";
+import { Textarea } from "@/components/ui/input";
+import { useToast } from "@/components/ui/toast";
 import { formatDateTime } from "@/lib/format";
 
 export default function ReaderDebriefPage() {
   const { reader } = useDemoReader();
-  const completed = assignmentsForReader(reader.id)
-    .map(assignmentView)
+  const { catalog, queries, submitDebrief } = useOperations();
+  const { notify } = useToast();
+  const completed = queries
+    .assignmentsForReader(reader.id)
+    .map(queries.assignmentView)
     .filter((item): item is NonNullable<typeof item> => item !== null && item.status === "completed");
-  const pending = assignmentsForReader(reader.id)
-    .map(assignmentView)
+  const pending = queries
+    .assignmentsForReader(reader.id)
+    .map(queries.assignmentView)
     .filter(
       (item): item is NonNullable<typeof item> =>
         item !== null && ["assigned", "accepted"].includes(item.status),
     );
   const mine = catalog.debriefs.filter((item) => item.readerId === reader.id);
+  const target = pending[0] ?? completed[0];
 
   return (
     <div className="grid gap-6">
@@ -29,10 +34,9 @@ export default function ReaderDebriefPage() {
         title="Debrief"
         description="After the last ceremony: the event, other readers, university staff, problems, plan versus execution, and ratings. Work-again is marked by Chester on the event."
       />
-      <DemoBanner />
 
       {mine.map((row) => {
-        const event = getEvent(row.eventId);
+        const event = queries.getEvent(row.eventId);
         return (
           <article key={row.id} className="border-y border-line py-4 text-sm">
             <h2 className="font-serif text-lg">{event?.name}</h2>
@@ -43,100 +47,97 @@ export default function ReaderDebriefPage() {
             <p className="text-ink-muted">Problems: {row.problemsOrConflicts}</p>
             <p className="text-ink-muted">Plan vs execution: {row.planVersusExecution}</p>
             <p className="mt-2">
-              Ratings 1–5: event {row.ratingEvent} · staff {row.ratingStaff} · operations {row.ratingOperations}
+              Ratings 1–5: event {row.ratingEvent} · staff {row.ratingStaff} · operations{" "}
+              {row.ratingOperations}
             </p>
             {event?.workAgainRecommendation ? (
-              <p className="mt-1 text-ink-muted">Chester marked this university as work-again / event ready.</p>
+              <p className="mt-1 text-ink-muted">
+                Chester marked this university as work-again / event ready.
+              </p>
             ) : null}
           </article>
         );
       })}
 
-      {pending.length ? (
+      {target && !mine.some((row) => row.assignmentId === target.id) ? (
         <form
           className="grid gap-4"
           onSubmit={(event) => {
             event.preventDefault();
+            const data = new FormData(event.currentTarget);
+            submitDebrief({
+              assignmentId: target.id,
+              eventId: target.eventId,
+              readerId: reader.id,
+              thoughtsAboutEvent: String(data.get("event") ?? ""),
+              thoughtsAboutOtherReaders: String(data.get("readers") ?? ""),
+              interactionWithUniversityStaff: String(data.get("staff") ?? ""),
+              problemsOrConflicts: String(data.get("problems") ?? ""),
+              planVersusExecution: String(data.get("plan") ?? ""),
+              ratingEvent: Number(data.get("ratingEvent") || 4),
+              ratingStaff: Number(data.get("ratingStaff") || 4),
+              ratingOperations: Number(data.get("ratingOps") || 4),
+            });
+            notify({ title: "Debrief completed." });
           }}
         >
-          <h2 className="font-serif text-lg">Upcoming: {pending[0].event.name}</h2>
+          <h2 className="font-serif text-lg">{target.event.name}</h2>
           <p className="text-sm text-ink-muted">
-            Submit within 72 hours of the last ceremony. This form does not save in the prototype.
+            Submit within 72 hours of the last ceremony.
           </p>
-          <Field id="debrief-event" label="Thoughts about the event">
-            <textarea
-              id="debrief-event"
-              className="min-h-24 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
-              name="event"
-            />
+          <Field id="debrief-event" label="University experience / thoughts about the event">
+            <Textarea id="debrief-event" name="event" required />
           </Field>
-          <Field id="debrief-readers" label="Other readers">
-            <textarea
-              id="debrief-readers"
-              className="min-h-20 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
-              name="readers"
-            />
+          <Field id="debrief-readers" label="Venue / other readers">
+            <Textarea id="debrief-readers" name="readers" />
           </Field>
-          <Field id="debrief-staff" label="University staff interaction">
-            <textarea
-              id="debrief-staff"
-              className="min-h-20 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
-              name="staff"
-            />
+          <Field id="debrief-staff" label="Staff">
+            <Textarea id="debrief-staff" name="staff" />
           </Field>
-          <Field id="debrief-problems" label="Problems or conflicts">
-            <textarea
-              id="debrief-problems"
-              className="min-h-20 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
-              name="problems"
-            />
+          <Field id="debrief-problems" label="Operational issues / problems">
+            <Textarea id="debrief-problems" name="problems" />
           </Field>
-          <Field id="debrief-plan" label="Plan versus execution">
-            <textarea
-              id="debrief-plan"
-              className="min-h-20 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
-              name="plan"
-            />
+          <Field id="debrief-plan" label="What went well / recommendations">
+            <Textarea id="debrief-plan" name="plan" />
           </Field>
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="text-sm">
-              Event
+            <Field id="rating-event" label="Overall (1–5)">
               <input
+                id="rating-event"
                 name="ratingEvent"
                 type="number"
                 min={1}
                 max={5}
                 defaultValue={4}
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
+                className="w-full min-h-11 rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
               />
-            </label>
-            <label className="text-sm">
-              Staff
+            </Field>
+            <Field id="rating-staff" label="Staff (1–5)">
               <input
+                id="rating-staff"
                 name="ratingStaff"
                 type="number"
                 min={1}
                 max={5}
                 defaultValue={4}
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
+                className="w-full min-h-11 rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
               />
-            </label>
-            <label className="text-sm">
-              Operations
+            </Field>
+            <Field id="rating-ops" label="Sound / ops (1–5)">
               <input
+                id="rating-ops"
                 name="ratingOps"
                 type="number"
                 min={1}
                 max={5}
                 defaultValue={4}
-                className="mt-1 w-full rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
+                className="w-full min-h-11 rounded-[var(--radius-md)] border border-line bg-paper-raised px-3 py-2"
               />
-            </label>
+            </Field>
           </div>
-          <p className="text-xs text-ink-muted">
-            1–5 draft scale. Exact wording can still be confirmed with Chester.
-          </p>
-          <DemoAction label="Submit debrief" title="Debrief is not saved" />
+          <Button type="submit" className="w-full min-h-12">
+            Complete debrief
+          </Button>
         </form>
       ) : null}
 

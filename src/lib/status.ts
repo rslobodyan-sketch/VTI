@@ -37,6 +37,7 @@ export function toneFor(kind: string, value: string): BadgeTone {
     "invoice:due": "warning",
     "invoice:reminded": "warning",
     "invoice:paid": "success",
+    "onboarding:complete": "success",
     "onboarding:ready": "success",
     "onboarding:in_progress": "warning",
     "onboarding:blocked": "danger",
@@ -54,7 +55,9 @@ export function toneFor(kind: string, value: string): BadgeTone {
     "inquiry:pending_admin_approval": "warning",
     "inquiry:coordinator_logistics": "info",
     "inquiry:closed_won": "success",
-    "inquiry:closed_lost": "neutral",
+    "client:prospect": "info",
+    "client:active": "success",
+    "client:inactive": "neutral",
   };
   return map[key] ?? "neutral";
 }

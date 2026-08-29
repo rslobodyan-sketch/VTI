@@ -25,7 +25,7 @@ export function ReaderShell({ children }: { children: ReactNode }) {
       <a href="#reader-main" className="skip-link">
         Skip to content
       </a>
-      <header className="sticky top-0 z-20 border-b border-line bg-paper-raised/95 px-3 py-2.5 backdrop-blur-sm">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper-raised px-3 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div>
             <p className="font-serif text-base leading-none">VTI Reader</p>
@@ -34,13 +34,15 @@ export function ReaderShell({ children }: { children: ReactNode }) {
             </p>
           </div>
           <div className="flex min-w-0 items-center gap-1">
-            <Badge tone="warning">Demo</Badge>
+            <Badge tone="accent" size="sm">
+              Reader
+            </Badge>
             <label className="sr-only" htmlFor="demo-reader">
               View as reader
             </label>
             <Select
               id="demo-reader"
-              className="min-h-11 min-w-[9.5rem] max-w-[42vw] text-sm"
+              className="min-h-11 min-w-[8.5rem] max-w-[42vw] text-sm"
               value={reader.id}
               onChange={(event) => setReaderId(event.target.value)}
               options={readers.map((item) => ({
@@ -64,7 +66,7 @@ export function ReaderShell({ children }: { children: ReactNode }) {
           aria-label="Reader"
           className="mx-auto mt-2 hidden max-w-2xl md:block"
         >
-          <ul className="flex flex-wrap gap-2">
+          <ul className="flex flex-wrap gap-1.5">
             {readerNav.map((item) => {
               const active = isActive(pathname, item.href);
               return (
@@ -72,7 +74,7 @@ export function ReaderShell({ children }: { children: ReactNode }) {
                   <Link
                     href={item.href}
                     className={cn(
-                      "inline-flex min-h-11 items-center rounded-full border px-3 text-sm",
+                      "inline-flex min-h-10 items-center rounded-[var(--radius-md)] border px-3 text-sm",
                       active
                         ? "border-accent bg-accent text-paper-raised"
                         : "border-line bg-paper-raised text-ink hover:bg-paper-inset",
@@ -90,14 +92,14 @@ export function ReaderShell({ children }: { children: ReactNode }) {
 
       <main
         id="reader-main"
-        className="mx-auto w-full max-w-lg px-3 pt-4 pb-[calc(var(--bottom-nav-h)+0.75rem)] md:max-w-2xl md:pb-8"
+        className="mx-auto w-full max-w-lg px-3 pt-4 pb-[calc(var(--bottom-nav-h)+0.85rem+env(safe-area-inset-bottom))] md:max-w-2xl md:pb-8"
       >
         {children}
       </main>
 
       <nav
         aria-label="Reader primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper-raised md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper-raised pb-[env(safe-area-inset-bottom)] md:hidden"
       >
         <ul className="grid grid-cols-5">
           {readerBottomNav.map((item) => {
@@ -112,6 +114,11 @@ export function ReaderShell({ children }: { children: ReactNode }) {
                   )}
                   aria-current={active ? "page" : undefined}
                 >
+                  {active ? (
+                    <span className="mb-1 h-0.5 w-5 rounded-full bg-accent" aria-hidden />
+                  ) : (
+                    <span className="mb-1 h-0.5 w-5" aria-hidden />
+                  )}
                   {item.label}
                 </Link>
               </li>

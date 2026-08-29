@@ -1015,7 +1015,7 @@ export const catalog: Catalog = {
       category: "Rideshare",
       amountCents: 6400,
       incurredOn: "2026-08-21",
-      description: "Airport test run documentation — sample for prototype.",
+      description: "Airport transfer documentation.",
       receiptLabel: "Receipt · rideshare",
     },
     {

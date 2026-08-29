@@ -2,16 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { StatusBadge } from "@/components/status/status-badge";
+import { useLiveQueries } from "@/components/operations/operations-store";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import {
-  calendarDayEvents,
-  monthIsoBounds,
-  personalBlocksOnDay,
-  readerAvailabilityInMonth,
-  type CalendarDayEvent,
-} from "@/data/queries";
+import { DEMO_AS_OF } from "@/data/catalog";
 import { cn } from "@/lib/cn";
 import {
   daysInMonth,
@@ -22,6 +16,7 @@ import {
   weekdaySundayIndex,
 } from "@/lib/format";
 import { labelize } from "@/lib/status";
+import type { CalendarDayEvent } from "@/data/queries";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -59,6 +54,7 @@ export function MonthCalendar({
   initialYear?: number;
   initialMonth?: number;
 }) {
+  const queries = useLiveQueries();
   const [year, setYear] = useState(initialYear);
   const [month, setMonth] = useState(initialMonth);
   const [selected, setSelected] = useState<{
@@ -71,8 +67,8 @@ export function MonthCalendar({
   const cells = leadBlanks + lastDay;
   const rows = Math.ceil(cells / 7);
 
-  const bounds = monthIsoBounds(year, month);
-  const availability = readerAvailabilityInMonth(bounds.start, bounds.end);
+  const bounds = queries.monthIsoBounds(year, month);
+  const availability = queries.readerAvailabilityInMonth(bounds.start, bounds.end);
 
   const days = Array.from({ length: lastDay }, (_, index) => {
     const day = index + 1;
@@ -80,13 +76,13 @@ export function MonthCalendar({
     return {
       day,
       key,
-      events: calendarDayEvents(key),
-      personal: personalBlocksOnDay(key),
+      events: queries.calendarDayEvents(key),
+      personal: queries.personalBlocksOnDay(key),
     };
   });
 
   const selectedItem = selected
-    ? calendarDayEvents(selected.dateKey).find((item) => item.event.id === selected.eventId)
+    ? queries.calendarDayEvents(selected.dateKey).find((item) => item.event.id === selected.eventId)
     : undefined;
 
   function shiftMonth(delta: number) {
@@ -108,6 +104,17 @@ export function MonthCalendar({
         <div className="flex flex-wrap gap-2">
           <Button variant="secondary" size="sm" onClick={() => shiftMonth(-1)}>
             Previous
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              const asOf = new Date(`${DEMO_AS_OF}T12:00:00.000Z`);
+              setYear(asOf.getUTCFullYear());
+              setMonth(asOf.getUTCMonth() + 1);
+            }}
+          >
+            Today
           </Button>
           <Button
             variant="secondary"
@@ -135,17 +142,20 @@ export function MonthCalendar({
         <li>
           <span className="mr-1 inline-block h-2 w-2 bg-ink-faint" /> Personal (admin)
         </li>
-        <li>Unsigned Call Sheet = amber mark</li>
+        <li>Unsigned Call Sheet noted on the event card</li>
         <li>Hotel / Air / Transfer shown when present</li>
       </ul>
 
-      <div className="overflow-x-auto border border-line">
-        <div className="min-w-[72rem]">
+      <div className="hidden overflow-x-auto border border-line bg-paper-raised lg:block">
+        <div className="min-w-[56rem]">
           <div className="grid grid-cols-7 border-b border-line bg-paper-inset">
-            {WEEKDAYS.map((label) => (
+            {WEEKDAYS.map((label, index) => (
               <p
                 key={label}
-                className="px-2 py-1.5 text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase"
+                className={cn(
+                  "px-2 py-1.5 text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase",
+                  (index === 0 || index === 6) && "bg-paper",
+                )}
               >
                 {label}
               </p>
@@ -156,94 +166,104 @@ export function MonthCalendar({
               const dayNumber = index - leadBlanks + 1;
               const inMonth = dayNumber >= 1 && dayNumber <= lastDay;
               const day = inMonth ? days[dayNumber - 1] : null;
+              const weekend = index % 7 === 0 || index % 7 === 6;
+              const selectedDay = Boolean(day && selected?.dateKey === day.key);
               return (
                 <div
                   key={index}
                   className={cn(
-                    "min-h-[11.5rem] border-b border-r border-line p-1.5",
-                    !inMonth && "bg-paper-inset/50",
+                    "border-b border-r border-line p-1.5",
+                    day && (day.events.length || day.personal.length)
+                      ? "min-h-[10.25rem]"
+                      : "min-h-[4.75rem]",
+                    !inMonth && "bg-paper-inset/60",
+                    weekend && inMonth && "bg-[color-mix(in_srgb,var(--paper)_70%,var(--paper-inset))]",
+                    selectedDay && "ring-1 ring-inset ring-focus",
                   )}
                 >
                   {day ? (
                     <>
-                      <p className="mb-1 text-xs font-medium tabular-nums">{day.day}</p>
-                      <div className="grid gap-1.5">
-                        {day.events.map((item) => (
-                          <button
-                            key={item.event.id}
-                            type="button"
-                            onClick={() =>
-                              setSelected({ dateKey: day.key, eventId: item.event.id })
-                            }
-                            className={cn(
-                              "w-full rounded-[2px] border-l-4 px-1.5 py-1 text-left text-[0.7rem] leading-snug",
-                              item.event.status === "tentative"
-                                ? "bg-paper-raised/80"
-                                : "bg-paper-raised",
-                            )}
-                            style={{ borderLeftColor: item.client.calendarColor }}
-                          >
-                            <span className="block font-medium text-ink">
-                              {item.client.name}
-                            </span>
-                            <span className="text-ink-muted">
-                              {item.ceremonies
-                                .map((ceremony) =>
-                                  ceremony.kind === "team_dinner"
-                                    ? `Dinner ${formatTime(ceremony.startsAt)}`
-                                    : formatTime(ceremony.startsAt),
-                                )
-                                .join(" · ")}
-                            </span>
-                            <span className="mt-0.5 flex flex-wrap items-center gap-1">
-                              <StatusBadge kind="event" value={item.event.status} />
-                              {item.callSheet ? (
-                                <StatusBadge kind="callsheet" value={item.callSheet.status} />
-                              ) : (
-                                <span className="text-warning">No CS</span>
+                      <p
+                        className={cn(
+                          "mb-1 text-xs tabular-nums",
+                          weekend ? "font-semibold text-ink-muted" : "font-medium",
+                        )}
+                      >
+                        {day.day}
+                      </p>
+                      <div className="grid gap-1">
+                        {day.events.map((item) => {
+                          const selectedEvent =
+                            selected?.dateKey === day.key && selected.eventId === item.event.id;
+                          const unsigned = item.assignments.some(
+                            (row) =>
+                              !row.acknowledged &&
+                              item.callSheet?.status === "issued" &&
+                              ["offered", "accepted", "assigned"].includes(row.status),
+                          );
+                          const bits = travelBits(item);
+                          return (
+                            <button
+                              key={item.event.id}
+                              type="button"
+                              onClick={() =>
+                                setSelected({ dateKey: day.key, eventId: item.event.id })
+                              }
+                              className={cn(
+                                "w-full rounded-[2px] border-l-4 px-1.5 py-1 text-left text-[0.68rem] leading-snug",
+                                item.event.status === "tentative"
+                                  ? "bg-paper/90"
+                                  : "bg-paper-raised",
+                                selectedEvent && "outline outline-1 outline-focus",
                               )}
-                              {item.assignments.some(
-                                (row) =>
-                                  !row.acknowledged &&
-                                  item.callSheet?.status === "issued" &&
-                                  ["offered", "accepted", "assigned"].includes(row.status),
-                              ) ? (
-                                <span
-                                  className="inline-block h-1.5 w-1.5 rounded-full bg-warning"
-                                  title="Call Sheet acknowledgement outstanding"
-                                />
-                              ) : null}
-                            </span>
-                            <span className="mt-0.5 block text-ink-muted">
-                              {item.event.estimatedGraduateCount.toLocaleString()} names
-                              {item.event.priorYearGraduateCount
-                                ? ` / last yr ${item.event.priorYearGraduateCount.toLocaleString()}`
-                                : ""}
-                            </span>
-                            <span className="block text-ink-muted">
-                              {formatMoney(item.event.quoteAmountCents)}
-                              {item.event.priorYearQuoteAmountCents
-                                ? ` / last yr ${formatMoney(item.event.priorYearQuoteAmountCents)}`
-                                : ""}
-                            </span>
-                            <span className="block">
-                              {item.lead ? `Lead ${item.lead.contractorName}` : "No lead"}
-                            </span>
-                            <span className="block text-ink-muted">{assignmentSignal(item)}</span>
-                            {travelBits(item).length ? (
-                              <span className="block text-ink-faint">
-                                {travelBits(item).join(" · ")}
+                              style={{ borderLeftColor: item.client.calendarColor }}
+                            >
+                              <span className="block font-semibold text-ink">
+                                {item.client.name}
                               </span>
-                            ) : null}
-                            {item.issues.length ? (
-                              <span className="block text-warning">{item.issues[0]}</span>
-                            ) : null}
-                          </button>
-                        ))}
+                              <span className="text-ink-muted">
+                                {item.ceremonies
+                                  .map((ceremony) =>
+                                    ceremony.kind === "team_dinner"
+                                      ? `Dinner ${formatTime(ceremony.startsAt)}`
+                                      : formatTime(ceremony.startsAt),
+                                  )
+                                  .join(" · ")}
+                              </span>
+                              <span className="mt-0.5 block text-[0.65rem] text-ink-faint">
+                                {item.event.status}
+                                {item.callSheet ? ` · CS v${item.callSheet.version}` : " · no CS"}
+                                {unsigned ? " · unsigned" : ""}
+                              </span>
+                              <span className="block tabular-nums text-ink-muted">
+                                {item.event.estimatedGraduateCount.toLocaleString()} names
+                                {item.event.priorYearGraduateCount
+                                  ? ` / ${item.event.priorYearGraduateCount.toLocaleString()}`
+                                  : ""}
+                                {" · "}
+                                {formatMoney(item.event.quoteAmountCents)}
+                                {item.event.priorYearQuoteAmountCents
+                                  ? ` / ${formatMoney(item.event.priorYearQuoteAmountCents)}`
+                                  : ""}
+                              </span>
+                              <span className="block">
+                                {item.lead ? `Lead ${item.lead.contractorName}` : "No lead"}
+                                {" · "}
+                                {assignmentSignal(item)}
+                              </span>
+                              {bits.length ? (
+                                <span className="block text-ink-faint">{bits.join(" · ")}</span>
+                              ) : null}
+                              {item.issues.length ? (
+                                <span className="block text-warning">{item.issues[0]}</span>
+                              ) : null}
+                            </button>
+                          );
+                        })}
                         {day.personal.map((block) => (
                           <p
                             key={block.id}
-                            className="border-l-4 border-ink-faint bg-paper-inset px-1.5 py-1 text-[0.7rem] text-ink-muted"
+                            className="border-l-4 border-ink-faint bg-paper-inset px-1.5 py-1 text-[0.68rem] text-ink-muted"
                           >
                             {block.title}
                           </p>
@@ -269,7 +289,7 @@ export function MonthCalendar({
                 <li key={`${day.key}-${item.event.id}`}>
                   <button
                     type="button"
-                    className="w-full border-l-4 bg-paper-raised px-3 py-2 text-left text-sm"
+                    className="w-full min-h-12 border-l-4 bg-paper-raised px-3 py-2.5 text-left text-sm"
                     style={{ borderLeftColor: item.client.calendarColor }}
                     onClick={() => setSelected({ dateKey: day.key, eventId: item.event.id })}
                   >
@@ -288,14 +308,14 @@ export function MonthCalendar({
             Reader availability
           </p>
           <p className="mt-1 text-xs text-ink-muted">
-            Admin-entered. Readers cannot edit this in the prototype.
+            Admin-entered. Readers cannot edit availability in MVP.
           </p>
           <ul className="mt-3 grid gap-2 text-sm">
             {availability.map((row) => (
               <li key={row.reader.id} className="flex items-start justify-between gap-2">
                 <Link
                   href={`/admin/readers/${row.reader.id}`}
-                  className="underline-offset-2 hover:underline"
+                  className="app-link"
                 >
                   {row.reader.contractorName}
                 </Link>
@@ -319,7 +339,7 @@ export function MonthCalendar({
         open={Boolean(selectedItem)}
         title={selectedItem ? selectedItem.client.name : "Event"}
         onClose={() => setSelected(null)}
-        className="w-[min(40rem,calc(100vw-1.5rem))] rounded-[var(--radius-lg)] border border-line bg-paper-raised p-0 text-ink shadow-[var(--shadow-md)]"
+        className="max-h-[min(80dvh,40rem)] w-[min(40rem,calc(100vw-1.5rem))] overflow-y-auto rounded-[var(--radius-lg)] border border-line bg-paper-raised p-0 text-ink shadow-[var(--shadow-md)]"
       >
         {selectedItem ? (
           <div className="grid gap-3 text-sm">
@@ -370,14 +390,14 @@ export function MonthCalendar({
             <div className="flex flex-wrap gap-2 pt-1">
               <Link
                 href={`/admin/events/${selectedItem.event.id}`}
-                className="text-sm underline-offset-2 hover:underline"
+                className="app-link-accent text-sm"
               >
                 Open event
               </Link>
               {selectedItem.callSheet ? (
                 <Link
                   href={`/admin/call-sheets/${selectedItem.callSheet.id}`}
-                  className="text-sm underline-offset-2 hover:underline"
+                  className="app-link-accent text-sm"
                 >
                   Call Sheet v{selectedItem.callSheet.version}
                 </Link>

@@ -20,15 +20,29 @@ type FieldProps = {
   id: string;
   label: string;
   hint?: string;
+  required?: boolean;
+  error?: string;
   children: ReactNode;
 };
 
-export function Field({ id, label, hint, children }: FieldProps) {
+export function Field({ id, label, hint, required, error, children }: FieldProps) {
   return (
     <div className="grid gap-1.5">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id}>
+        {label}
+        {required ? (
+          <span className="ml-1 font-normal text-danger" aria-hidden>
+            *
+          </span>
+        ) : null}
+        {required ? <span className="sr-only"> required</span> : null}
+      </Label>
       {children}
-      {hint ? (
+      {error ? (
+        <p id={`${id}-error`} className="text-sm text-danger" role="alert">
+          {error}
+        </p>
+      ) : hint ? (
         <p id={`${id}-hint`} className="text-sm text-ink-muted">
           {hint}
         </p>

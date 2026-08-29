@@ -12,7 +12,7 @@ export const adminNav: NavGroup[] = [
   {
     label: "Operate",
     items: [
-      { href: "/admin", label: "Overview" },
+      { href: "/admin", label: "Dashboard" },
       { href: "/admin/calendar", label: "Calendar" },
     ],
   },
@@ -53,6 +53,7 @@ export const readerNav: NavItem[] = [
   { href: "/reader", label: "Home" },
   { href: "/reader/assignments", label: "Assignments" },
   { href: "/reader/call-sheets", label: "Call Sheets" },
+  { href: "/reader/calendar", label: "Calendar" },
   { href: "/reader/expenses", label: "Expenses" },
   { href: "/reader/debrief", label: "Debrief" },
   { href: "/reader/profile", label: "Profile" },

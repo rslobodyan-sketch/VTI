@@ -8,12 +8,12 @@ export function Metric({
   hint?: string;
 }) {
   return (
-    <div className="min-w-[9rem]">
-      <p className="text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase">
-        {label}
+    <div className="min-w-[7.5rem]">
+      <p className="app-kicker">{label}</p>
+      <p className="mt-1 font-serif text-xl font-semibold tabular-nums tracking-tight">
+        {value}
       </p>
-      <p className="mt-1 font-serif text-2xl font-semibold tabular-nums">{value}</p>
-      {hint ? <p className="mt-1 text-xs text-ink-muted">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs text-ink-muted">{hint}</p> : null}
     </div>
   );
 }

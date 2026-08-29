@@ -22,11 +22,11 @@
   --info: #2c4a6e;
   --info-soft: #e4ebf3;
   --overlay: rgb(27 24 20 / 0.46);
-  --shadow-sm: 0 1px 0 rgb(27 24 20 / 0.06);
-  --shadow-md: 0 8px 24px rgb(27 24 20 / 0.08);
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
+  --shadow-sm: 0 1px 0 rgb(27 24 20 / 0.05);
+  --shadow-md: 0 6px 18px rgb(27 24 20 / 0.07);
+  --radius-sm: 3px;
+  --radius-md: 5px;
+  --radius-lg: 8px;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
@@ -73,6 +73,10 @@
   --radius-lg: var(--radius-lg);
 }
 
+html {
+  color-scheme: light;
+}
+
 html,
 body {
   background: var(--paper);
@@ -95,6 +99,38 @@ body {
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+
+.app-page {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.app-kicker {
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.app-link {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+
+.app-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.app-link-accent {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+.app-link-accent:hover {
+  text-decoration: underline;
 }
 
 .skip-link {
@@ -128,8 +164,41 @@ body {
   }
 }
 
+thead th {
+  position: sticky;
+  top: 0;
+  background: var(--paper-inset);
+  z-index: 1;
+}
+
 tbody tr:hover td {
   background: var(--paper-inset);
+}
+
+.call-sheet-doc dt {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+@media print {
+  .no-print,
+  .skip-link,
+  aside,
+  header.no-print,
+  nav {
+    display: none !important;
+  }
+
+  main {
+    padding: 0 !important;
+  }
+
+  .call-sheet-doc {
+    border: none !important;
+    background: white !important;
+  }
 }
 
 dialog::backdrop {

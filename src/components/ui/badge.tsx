@@ -20,17 +20,20 @@ const tones: Record<BadgeTone, string> = {
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
   tone?: BadgeTone;
+  size?: "md" | "sm";
 };
 
 export function Badge({
   className,
   tone = "neutral",
+  size = "md",
   ...props
 }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-[var(--radius-sm)] px-2 py-0.5 text-xs font-medium tracking-[0.02em] uppercase",
+        "inline-flex items-center rounded-[var(--radius-sm)] font-medium capitalize",
+        size === "sm" ? "px-1.5 py-px text-[0.65rem]" : "px-1.5 py-0.5 text-[0.6875rem]",
         tones[tone],
         className,
       )}

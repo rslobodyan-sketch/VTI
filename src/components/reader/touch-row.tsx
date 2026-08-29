@@ -25,7 +25,7 @@ export function TouchRow({
   if (!href) return content;
 
   return (
-    <Link href={href} className="block rounded-[var(--radius-md)] hover:bg-paper-inset/70">
+    <Link href={href} className="block hover:bg-paper-inset/70">
       {content}
     </Link>
   );
