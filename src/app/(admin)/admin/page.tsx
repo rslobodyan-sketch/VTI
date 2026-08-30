@@ -52,7 +52,7 @@ export default function AdminOverviewPage() {
         }
       />
 
-      <Section title="Needs attention" description="Queues jump to the working list.">
+      <Section title="Needs attention" description="Open a queue to work the list.">
         <ul className="grid gap-0 border-y border-line">
           {[
             {

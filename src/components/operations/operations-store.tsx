@@ -55,6 +55,7 @@ type Overlay = {
   expenseReports: ExpenseReport[];
   expenseLines: ExpenseLine[];
   debriefs: Debrief[];
+  compensation: ReaderCompensation[];
   profiles: UniversityProfile[];
   activity: ActivityItem[];
   assignmentStatus: Record<string, AssignmentStatus>;
@@ -77,6 +78,7 @@ const emptyOverlay: Overlay = {
   expenseReports: [],
   expenseLines: [],
   debriefs: [],
+  compensation: [],
   profiles: [],
   activity: [],
   assignmentStatus: {},
@@ -109,7 +111,24 @@ function mergeCatalog(overlay: Overlay): Catalog {
   const expenseReports = upsert(seedCatalog.expenseReports, overlay.expenseReports).map((item) =>
     overlay.expenseStatus[item.id] ? { ...item, status: overlay.expenseStatus[item.id] } : item,
   );
-  const compensation = seedCatalog.compensation.map((item) =>
+  const overlayCompensation = overlay.compensation ?? [];
+  const compensationBase = upsert(seedCatalog.compensation, overlayCompensation);
+  const paidAssignmentIds = new Set(
+    compensationBase
+      .filter((item) => item.kind === "compensation")
+      .map((item) => item.assignmentId),
+  );
+  const impliedCompensation: ReaderCompensation[] = overlay.assignments
+    .filter((item) => !paidAssignmentIds.has(item.id))
+    .map((item) => ({
+      id: `pay-${item.id}`,
+      assignmentId: item.id,
+      readerId: item.readerId,
+      kind: "compensation",
+      amountCents: item.promisedPayCents,
+      status: "promised",
+    }));
+  const compensation = upsert(compensationBase, impliedCompensation).map((item) =>
     overlay.compensationPatches[item.id]
       ? { ...item, ...overlay.compensationPatches[item.id] }
       : item,
@@ -148,6 +167,7 @@ function loadOverlay(): Overlay {
       ...emptyOverlay,
       ...parsed,
       expenseLines: parsed.expenseLines ?? [],
+      compensation: parsed.compensation ?? [],
       compensationPatches: parsed.compensationPatches ?? {},
       assignmentStatus: parsed.assignmentStatus ?? {},
       expenseStatus: parsed.expenseStatus ?? {},
@@ -704,6 +724,17 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
           ...prev.assignments,
           { id, eventId, readerId, role, status: "offered", promisedPayCents },
         ],
+        compensation: [
+          ...prev.compensation,
+          {
+            id: uid("pay"),
+            assignmentId: id,
+            readerId,
+            kind: "compensation",
+            amountCents: promisedPayCents,
+            status: "promised",
+          },
+        ],
         activity: event
           ? [
               ...prev.activity,
@@ -1013,6 +1044,11 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
 
   const reset = useCallback(() => {
     persist(emptyOverlay);
+    try {
+      sessionStorage.removeItem("vti-demo-reader");
+    } catch {
+      /* private mode */
+    }
   }, [persist]);
 
   const hasOverrides =
@@ -1028,6 +1064,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       overlay.expenseReports.length +
       overlay.expenseLines.length +
       overlay.debriefs.length +
+      (overlay.compensation?.length ?? 0) +
       overlay.profiles.length +
       overlay.activity.length +
       Object.keys(overlay.assignmentStatus).length +

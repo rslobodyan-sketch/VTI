@@ -1,7 +1,9 @@
 import type { BadgeTone } from "@/components/ui/badge";
 
 export function labelize(value: string): string {
-  return value.replaceAll("_", " ");
+  return value
+    .replaceAll("_", " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export function toneFor(kind: string, value: string): BadgeTone {

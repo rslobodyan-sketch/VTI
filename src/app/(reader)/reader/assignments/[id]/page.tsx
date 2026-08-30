@@ -125,7 +125,10 @@ export default function ReaderAssignmentHubPage() {
 
       <div className="grid gap-2">
         <ButtonLink href="/reader/expenses" variant="secondary" className="w-full min-h-12">
-          Expenses {liveExpense ? `· ${liveExpense.replaceAll("_", " ")}` : "· add receipts"}
+          Expenses{" "}
+          {liveExpense
+            ? `· ${liveExpense.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}`
+            : "· add receipts"}
         </ButtonLink>
         <ButtonLink href="/reader/debrief" variant="secondary" className="w-full min-h-12">
           Debrief

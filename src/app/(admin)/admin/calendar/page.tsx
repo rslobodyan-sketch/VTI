@@ -13,7 +13,7 @@ export default function AdminCalendarPage() {
         ]}
       />
       <p className="text-xs text-ink-muted">
-        November 2026 is the dense demo month (Walden + Eastbridge). Personal blocks are admin-only pending Chester’s confirmation.
+        November 2026 is the current operating month. Personal blocks are admin-only pending Chester’s confirmation.
       </p>
       <MonthCalendar initialYear={2026} initialMonth={11} />
     </div>

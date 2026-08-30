@@ -851,7 +851,7 @@ export function UniversityOnboarding({ existingId }: { existingId?: string }) {
           <h2 id="step-review" className="font-serif text-lg font-semibold">
             Review
           </h2>
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <dl className="grid gap-4 text-sm sm:grid-cols-2">
             <div>
               <dt className="app-kicker">University</dt>
               <dd className="font-medium">{form.name || "—"}</dd>
@@ -867,15 +867,28 @@ export function UniversityOnboarding({ existingId }: { existingId?: string }) {
                 {form.primaryEmail} · {form.primaryPhone}
               </dd>
             </div>
+            {form.extraName ? (
+              <div>
+                <dt className="app-kicker">Additional contact</dt>
+                <dd className="font-medium">{form.extraName}</dd>
+                <dd className="text-ink-muted">
+                  {[form.extraRole, form.extraEmail, form.extraPhone].filter(Boolean).join(" · ")}
+                </dd>
+              </div>
+            ) : null}
             <div>
               <dt className="app-kicker">Operational requirements</dt>
               <dd>{form.typicalSeason}</dd>
-              <dd className="text-ink-muted">{form.expectedReaders}</dd>
+              <dd className="text-ink-muted">
+                {[form.expectedReaders, form.preferredVenues].filter(Boolean).join(" · ")}
+              </dd>
             </div>
             <div>
               <dt className="app-kicker">Billing</dt>
               <dd>{form.paymentTerms}</dd>
-              <dd className="text-ink-muted">{form.poRequirements}</dd>
+              <dd className="text-ink-muted">
+                {[form.billingEmail, form.poRequirements].filter(Boolean).join(" · ")}
+              </dd>
             </div>
             <div>
               <dt className="app-kicker">Compliance</dt>

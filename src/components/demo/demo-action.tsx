@@ -7,7 +7,7 @@ import { useToast } from "@/components/ui/toast";
 export function DemoAction({
   label,
   title,
-  message = "Demo actions stay in this browser tab only. They are not written to a database.",
+  message = "This action is recorded in the working session only.",
   variant = "primary",
 }: {
   label: string;
@@ -80,7 +80,7 @@ export function AcceptAssignmentButton({
         acceptAssignment(assignmentId);
         notify({
           title: "Assignment accepted",
-          message: "Status updated across operations for this session.",
+          message: "Status updated across operations.",
         });
       }}
     >

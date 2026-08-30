@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
@@ -20,18 +21,23 @@ export function EventCreateView({
   inquiryId?: string;
 }) {
   const router = useRouter();
-  const { catalog, createEvent, queries } = useOperations();
+  const { catalog, createEvent, queries, ready } = useOperations();
   const { notify } = useToast();
   const inquiry = inquiryId ? catalog.inquiries.find((item) => item.id === inquiryId) : undefined;
   const requested = requestedClientId ?? inquiry?.clientId ?? "";
-  const presetClient = catalog.clients.some((item) => item.id === requested)
+  const resolvedRequested = catalog.clients.some((item) => item.id === requested)
     ? requested
     : inquiry?.clientId && catalog.clients.some((item) => item.id === inquiry.clientId)
       ? inquiry.clientId
       : catalog.clients[0]?.id || "";
-  const [clientId, setClientId] = useState(presetClient);
+  const [manualClientId, setManualClientId] = useState<string | null>(null);
+  const clientId =
+    manualClientId && catalog.clients.some((item) => item.id === manualClientId)
+      ? manualClientId
+      : resolvedRequested;
   const client = queries.getClient(clientId);
-  const [name, setName] = useState(client ? `${client.name} Commencement` : "");
+  const [name, setName] = useState("");
+  const eventName = name || (client ? `${client.name} Commencement` : "");
   const [status, setStatus] = useState<EventStatus>("tentative");
   const [quote, setQuote] = useState("8500");
   const [names, setNames] = useState("400");
@@ -49,6 +55,8 @@ export function EventCreateView({
   const [parking, setParking] = useState("");
   const [notes, setNotes] = useState("");
 
+  if (!ready) return <RecordPending />;
+
   return (
     <div className="app-page">
       <PageHeader
@@ -64,14 +72,14 @@ export function EventCreateView({
         className="grid max-w-3xl gap-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!client || !name.trim()) return;
+          if (!client || !eventName.trim()) return;
           const startsAt = chicagoWallToIso(ceremonyDate, startTime);
           const callAt = chicagoWallToIso(ceremonyDate, callTime);
           const soundAt = chicagoWallToIso(ceremonyDate, soundCheck);
           const endsAtIso = addHoursIso(startsAt, 3);
           const id = createEvent({
             clientId: client.id,
-            name: name.trim(),
+            name: eventName.trim(),
             status,
             quoteAmountCents: Math.round(Number(quote) * 100) || 0,
             estimatedGraduateCount: Number(names) || 0,
@@ -102,7 +110,7 @@ export function EventCreateView({
             id="ev-uni"
             value={clientId}
             onChange={(e) => {
-              setClientId(e.target.value);
+              setManualClientId(e.target.value);
               const next = catalog.clients.find((item) => item.id === e.target.value);
               if (next) setName(`${next.name} Commencement`);
             }}
@@ -110,7 +118,7 @@ export function EventCreateView({
           />
         </Field>
         <Field id="ev-name" label="Event name" required>
-          <Input id="ev-name" value={name} onChange={(e) => setName(e.target.value)} />
+          <Input id="ev-name" value={eventName} onChange={(e) => setName(e.target.value)} />
         </Field>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field id="ev-status" label="Status">

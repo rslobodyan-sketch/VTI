@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 
 export function DemoBanner({
-  children = "Local demo catalog. Not live VTI records. Wave and Patriot are not connected.",
+  children = "Working session for operations review. Wave and Patriot are not connected.",
 }: {
   children?: ReactNode;
 }) {

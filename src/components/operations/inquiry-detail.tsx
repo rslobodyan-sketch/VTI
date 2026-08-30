@@ -110,7 +110,7 @@ export function InquiryDetailView({ id }: { id: string }) {
       </Section>
 
       {open ? (
-        <Section title="Progress stage" description="Canonical pipeline. Do not skip university administration when it is required.">
+        <Section title="Progress stage" description="Move one stage at a time. University administration cannot be skipped when it is required.">
           <div className="flex flex-wrap gap-2">
             {nextStage ? (
               <Button

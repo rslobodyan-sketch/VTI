@@ -6,7 +6,7 @@ export default function HomePage() {
     <div className="min-h-dvh bg-paper px-4 py-10 text-ink">
       <main className="mx-auto grid min-h-[80dvh] max-w-3xl content-center gap-8">
         <div>
-          <Badge tone="accent" size="sm">
+          <Badge tone="accent" size="sm" className="normal-case">
             VTI Operations
           </Badge>
           <h1 className="mt-3 font-serif text-4xl font-semibold tracking-tight">
@@ -19,7 +19,7 @@ export default function HomePage() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <article className="border border-line bg-paper-raised p-5">
-            <p className="app-kicker">Desktop-first</p>
+            <p className="app-kicker">Operations</p>
             <h2 className="mt-2 font-serif text-2xl">Admin</h2>
             <p className="mt-1 text-sm text-ink-muted">
               Calendar, universities, assignments, Call Sheets, expenses, and payment tracking.
@@ -29,7 +29,7 @@ export default function HomePage() {
             </ButtonLink>
           </article>
           <article className="border border-line bg-paper-raised p-5">
-            <p className="app-kicker">Mobile-first</p>
+            <p className="app-kicker">Assignment packet</p>
             <h2 className="mt-2 font-serif text-2xl">Reader</h2>
             <p className="mt-1 text-sm text-ink-muted">
               Next job, Call Sheet, travel, own compensation, receipts, expenses, and debrief.

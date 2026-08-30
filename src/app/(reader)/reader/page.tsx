@@ -87,7 +87,11 @@ export default function ReaderHomePage() {
         <TouchRow
           href="/reader/expenses"
           title="Expenses"
-          meta={liveExpense ? liveExpense.replaceAll("_", " ") : "No report yet"}
+          meta={
+            liveExpense
+              ? liveExpense.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())
+              : "No report yet"
+          }
         />
         <TouchRow href="/reader/debrief" title="Debrief" meta="After the last ceremony" />
         <TouchRow href="/reader/calendar" title="Your calendar" meta="Assigned events only" />

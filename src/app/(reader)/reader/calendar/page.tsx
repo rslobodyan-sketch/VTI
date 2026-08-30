@@ -40,8 +40,11 @@ export default function ReaderCalendarPage() {
               meta={
                 <>
                   {item.client.name}
-                  {window ? ` · ${formatDate(window.start)}` : ""}
-                  {ceremonies[0] ? ` · ${formatDateTime(ceremonies[0].startsAt)}` : ""}
+                  {ceremonies[0]
+                    ? ` · ${formatDateTime(ceremonies[0].startsAt)}`
+                    : window
+                      ? ` · ${formatDate(window.start)}`
+                      : ""}
                 </>
               }
             />

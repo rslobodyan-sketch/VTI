@@ -231,7 +231,7 @@ export function MonthCalendar({
                                   .join(" · ")}
                               </span>
                               <span className="mt-0.5 block text-[0.65rem] text-ink-faint">
-                                {item.event.status}
+                                {labelize(item.event.status)}
                                 {item.callSheet ? ` · CS v${item.callSheet.version}` : " · no CS"}
                                 {unsigned ? " · unsigned" : ""}
                               </span>
@@ -308,7 +308,7 @@ export function MonthCalendar({
             Reader availability
           </p>
           <p className="mt-1 text-xs text-ink-muted">
-            Admin-entered. Readers cannot edit availability in MVP.
+            Admin-entered. Who sets reader availability is pending Chester confirmation.
           </p>
           <ul className="mt-3 grid gap-2 text-sm">
             {availability.map((row) => (

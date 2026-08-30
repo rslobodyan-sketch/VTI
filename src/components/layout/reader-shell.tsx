@@ -18,7 +18,7 @@ function isActive(pathname: string, href: string): boolean {
 export function ReaderShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { reader, readers, setReaderId } = useDemoReader();
+  const { reader, readers, setReaderId, ready } = useDemoReader();
 
   return (
     <div className="min-h-dvh bg-paper text-ink">
@@ -37,19 +37,27 @@ export function ReaderShell({ children }: { children: ReactNode }) {
             <Badge tone="accent" size="sm">
               Reader
             </Badge>
-            <label className="sr-only" htmlFor="demo-reader">
-              View as reader
-            </label>
-            <Select
-              id="demo-reader"
-              className="min-h-11 min-w-[8.5rem] max-w-[42vw] text-sm"
-              value={reader.id}
-              onChange={(event) => setReaderId(event.target.value)}
-              options={readers.map((item) => ({
-                value: item.id,
-                label: item.contractorName,
-              }))}
-            />
+            {ready ? (
+              <>
+                <label className="sr-only" htmlFor="demo-reader">
+                  View as reader
+                </label>
+                <Select
+                  id="demo-reader"
+                  className="min-h-11 min-w-[8.5rem] max-w-[42vw] text-sm"
+                  value={reader.id}
+                  onChange={(event) => setReaderId(event.target.value)}
+                  options={readers.map((item) => ({
+                    value: item.id,
+                    label: item.contractorName,
+                  }))}
+                />
+              </>
+            ) : (
+              <p className="min-h-11 min-w-[8.5rem] text-sm text-ink-muted" aria-live="polite">
+                Loading…
+              </p>
+            )}
             <div className="md:hidden">
               <DropdownMenu
                 label="More"
@@ -94,7 +102,7 @@ export function ReaderShell({ children }: { children: ReactNode }) {
         id="reader-main"
         className="mx-auto w-full max-w-lg px-3 pt-4 pb-[calc(var(--bottom-nav-h)+0.85rem+env(safe-area-inset-bottom))] md:max-w-2xl md:pb-8"
       >
-        {children}
+        {ready ? children : <p className="text-sm text-ink-muted">Loading assignment…</p>}
       </main>
 
       <nav

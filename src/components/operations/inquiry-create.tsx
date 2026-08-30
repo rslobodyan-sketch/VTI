@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input, Textarea } from "@/components/ui/input";
@@ -13,12 +14,15 @@ import { useToast } from "@/components/ui/toast";
 export function InquiryCreateView({ clientId: requestedClientId }: { clientId?: string }) {
   const router = useRouter();
   const requested = requestedClientId ?? "";
-  const { catalog, createInquiry, queries } = useOperations();
+  const { catalog, createInquiry, queries, ready } = useOperations();
   const { notify } = useToast();
-  const preset = catalog.clients.some((item) => item.id === requested)
-    ? requested
-    : catalog.clients[0]?.id || "";
-  const [clientId, setClientId] = useState(preset);
+  const resolvedRequested = catalog.clients.some((item) => item.id === requested) ? requested : "";
+  const fallback = catalog.clients[0]?.id || "";
+  const [manualClientId, setManualClientId] = useState<string | null>(null);
+  const clientId =
+    manualClientId && catalog.clients.some((item) => item.id === manualClientId)
+      ? manualClientId
+      : resolvedRequested || fallback;
   const client = queries.getClient(clientId);
   const primary = client ? queries.contactsForClient(client.id).find((item) => item.isPrimary) : undefined;
   const [eventType, setEventType] = useState("Commencement");
@@ -27,6 +31,8 @@ export function InquiryCreateView({ clientId: requestedClientId }: { clientId?: 
   const [estimatedValue, setEstimatedValue] = useState("8500");
   const [notes, setNotes] = useState("");
   const [nextAction, setNextAction] = useState("Schedule discovery call");
+
+  if (!ready) return <RecordPending />;
 
   return (
     <div className="app-page">
@@ -68,7 +74,7 @@ export function InquiryCreateView({ clientId: requestedClientId }: { clientId?: 
           <Select
             id="inq-uni"
             value={clientId}
-            onChange={(event) => setClientId(event.target.value)}
+            onChange={(event) => setManualClientId(event.target.value)}
             options={catalog.clients.map((item) => ({ value: item.id, label: item.name }))}
           />
         </Field>

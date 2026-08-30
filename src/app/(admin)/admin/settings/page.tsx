@@ -106,6 +106,10 @@ export default function AdminSettingsPage() {
           <Field id="pref-ack" label="Call Sheet acknowledgement">
             <Input id="pref-ack" defaultValue="Click-to-accept (no drawn signature)" readOnly />
           </Field>
+          <p className="text-xs text-ink-muted">
+            Assumption pending Chester confirmation: click-to-accept is enough for now. Drawn signatures
+            are not in use.
+          </p>
         </div>
       </Section>
 

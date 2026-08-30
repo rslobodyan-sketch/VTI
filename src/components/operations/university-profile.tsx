@@ -19,6 +19,7 @@ import { Select } from "@/components/ui/select";
 import { TextLink } from "@/components/ui/text-link";
 import { useToast } from "@/components/ui/toast";
 import { formatDate, formatMoney, formatShortDate } from "@/lib/format";
+import { labelize } from "@/lib/status";
 
 export function UniversityProfileView({ id }: { id: string }) {
   const {
@@ -381,11 +382,18 @@ export function UniversityProfileView({ id }: { id: string }) {
           />
         ) : null}
         {insurance.length ? (
-          <ul className="mt-3 grid gap-2 text-sm">
+          <ul className="mt-3 grid gap-2">
             {insurance.map((item) => (
-              <li key={item.id}>
-                <StatusBadge kind="insurance" value={item.status} /> {item.year} due{" "}
-                {formatShortDate(item.dueOn)}. {item.notes}
+              <li
+                key={item.id}
+                className="flex flex-wrap items-start gap-2 border border-line bg-paper-raised px-3 py-2.5"
+              >
+                <StatusBadge kind="insurance" value={item.status} />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium">{item.year} reminder</p>
+                  <p className="text-sm text-ink-muted">Due {formatShortDate(item.dueOn)}</p>
+                  {item.notes ? <p className="text-sm text-ink-muted">{item.notes}</p> : null}
+                </div>
               </li>
             ))}
           </ul>
@@ -427,14 +435,12 @@ export function UniversityProfileView({ id }: { id: string }) {
               title: doc.name,
               subtitle: doc.type,
               trailing: (
-                <span className="text-sm capitalize text-ink-muted">
-                  {doc.status.replaceAll("_", " ")}
-                </span>
+                <span className="text-sm text-ink-muted">{labelize(doc.status)}</span>
               ),
               cells: {
                 name: doc.name,
                 type: doc.type,
-                status: <span className="capitalize">{doc.status.replaceAll("_", " ")}</span>,
+                status: labelize(doc.status),
                 date: doc.date ? formatShortDate(doc.date) : "—",
                 expires: doc.expiresOn ? formatShortDate(doc.expiresOn) : "—",
               },

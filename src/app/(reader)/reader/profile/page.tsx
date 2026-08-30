@@ -15,7 +15,7 @@ export default function ReaderProfilePage() {
     <div className="grid gap-5">
       <PageHeader
         title={reader.contractorName}
-        description="Read-only profile. You cannot edit this after onboarding in the current plan. Tax ID is masked. License images are not shown."
+        description="Read-only. Profile details are set at onboarding and cannot be changed here. Tax ID is masked. License images are not shown."
       />
       <dl className="grid gap-3 text-sm">
         <div>
