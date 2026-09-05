@@ -53,6 +53,7 @@ test.describe("Calendars", () => {
 
     await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Export .ics" })).toBeVisible();
+    await expect(page.locator("#reader-calendar-grid")).toBeVisible();
   });
 
   test("Reader print is wired and .ics contains assigned Walden", async ({ page }) => {
@@ -96,5 +97,79 @@ test.describe("Calendars", () => {
     expect(ics).not.toContain("$2,800");
     expect(ics).not.toContain("280000");
     expect(ics).not.toContain("last year");
+  });
+
+  test("Reader event dialog stays assigned-only", async ({ page }) => {
+    await startClean(page, "/reader/calendar");
+    await switchReader(page, MARCUS);
+    const heading = page.locator("p.font-serif.text-2xl").first();
+    if ((await heading.innerText()) !== "November 2026") {
+      for (let i = 0; i < 8; i += 1) {
+        if ((await heading.innerText()) === "November 2026") break;
+        await page.getByRole("button", { name: "Next", exact: true }).click();
+      }
+    }
+    await page.getByRole("button", { name: /Walden University/ }).first().click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("heading", { name: "Walden University" })).toBeVisible();
+    await expect(dialog.getByText("Walden Fall Commencement 2026")).toBeVisible();
+    await expect(dialog.getByText("Friday undergraduate")).toBeVisible();
+    await expect(dialog.getByText("$24,200")).toHaveCount(0);
+    await expect(dialog.getByText("last year")).toHaveCount(0);
+    await expect(dialog.getByText("Elena")).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  });
+
+  test("Admin Today marks the demo as-of day", async ({ page }) => {
+    await startClean(page, "/admin/calendar");
+    await page.getByRole("button", { name: "Today" }).click();
+    await expect(page.locator("p.font-serif.text-2xl").first()).toHaveText("August 2026");
+    await expect(page.locator('[aria-current="date"]')).toBeVisible();
+    await expect(page.locator('[aria-current="date"]')).toContainText("28");
+  });
+
+  test("Admin and Reader share Walden November from the same records", async ({ page }) => {
+    await startClean(page, "/admin/calendar");
+    const heading = page.locator("p.font-serif.text-2xl").first();
+    if ((await heading.innerText()) !== "November 2026") {
+      for (let i = 0; i < 8; i += 1) {
+        if ((await heading.innerText()) === "November 2026") break;
+        await page.getByRole("button", { name: "Next", exact: true }).click();
+      }
+    }
+    await expect(page.getByText("Walden University").first()).toBeVisible();
+    await expect(page.getByText("1,840 names").first()).toBeVisible();
+    await expect(page.getByText("$24,200.00").first()).toBeVisible();
+
+    await page.goto("/reader/calendar");
+    await switchReader(page, MARCUS);
+    const readerHeading = page.locator("p.font-serif.text-2xl").first();
+    if ((await readerHeading.innerText()) !== "November 2026") {
+      for (let i = 0; i < 8; i += 1) {
+        if ((await readerHeading.innerText()) === "November 2026") break;
+        await page.getByRole("button", { name: "Next", exact: true }).click();
+      }
+    }
+    await expect(page.locator("#reader-calendar-grid").getByText("Walden University").first()).toBeVisible();
+    await expect(page.locator("#reader-calendar-grid").getByText("$24,200")).toHaveCount(0);
+  });
+
+  test("Admin and Reader month grids keep Sunday–Saturday on screen", async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await startClean(page, "/admin/calendar");
+    const adminGrid = page.locator("#admin-calendar-grid");
+    await expect(adminGrid).toBeVisible();
+    for (const weekday of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
+      await expect(adminGrid.getByText(weekday, { exact: true })).toBeVisible();
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/reader/calendar");
+    const readerGrid = page.locator("#reader-calendar-grid");
+    await expect(readerGrid).toBeVisible();
+    for (const weekday of ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]) {
+      await expect(readerGrid.getByText(weekday, { exact: true })).toBeVisible();
+    }
   });
 });

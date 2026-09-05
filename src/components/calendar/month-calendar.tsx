@@ -10,6 +10,7 @@ import { cn } from "@/lib/cn";
 import {
   calendarDateKey,
   defaultAssignedCalendarMonth,
+  isCalendarToday,
   shiftCalendarMonth,
   WEEKDAYS,
 } from "@/lib/calendar-grid";
@@ -141,8 +142,13 @@ export function MonthCalendar() {
         <li>Hotel / Air / Transfer shown when present</li>
       </ul>
 
-      <div className="hidden overflow-x-auto border border-line bg-paper-raised lg:block">
-        <div className="min-w-[56rem]">
+      <div
+        id="admin-calendar-grid"
+        className="hidden w-full min-w-0 max-w-full overflow-x-auto border border-line bg-paper-raised lg:block"
+        role="grid"
+        aria-label={`${formatMonthTitle(year, month)} operational calendar`}
+      >
+        <div className="w-full min-w-0">
           <div className="grid grid-cols-7 border-b border-line bg-paper-inset">
             {WEEKDAYS.map((label, index) => (
               <p
@@ -163,16 +169,20 @@ export function MonthCalendar() {
               const day = inMonth ? days[dayNumber - 1] : null;
               const weekend = index % 7 === 0 || index % 7 === 6;
               const selectedDay = Boolean(day && selected?.dateKey === day.key);
+              const isToday = Boolean(day && isCalendarToday(year, month, day.day, asOf));
               return (
                 <div
                   key={index}
+                  role="gridcell"
+                  aria-current={isToday ? "date" : undefined}
                   className={cn(
-                    "border-b border-r border-line p-1.5",
+                    "min-w-0 overflow-hidden border-b border-r border-line p-1.5",
                     day && (day.events.length || day.personal.length)
                       ? "min-h-[10.25rem]"
                       : "min-h-[4.75rem]",
                     !inMonth && "bg-paper-inset/60",
                     weekend && inMonth && "bg-[color-mix(in_srgb,var(--paper)_70%,var(--paper-inset))]",
+                    isToday && "bg-accent-soft/60",
                     selectedDay && "ring-1 ring-inset ring-focus",
                   )}
                 >
@@ -181,9 +191,12 @@ export function MonthCalendar() {
                       <p
                         className={cn(
                           "mb-1 text-xs tabular-nums",
-                          weekend ? "font-semibold text-ink-muted" : "font-medium",
+                          isToday &&
+                            "inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-accent px-1 font-semibold text-paper-raised",
+                          !isToday && (weekend ? "font-semibold text-ink-muted" : "font-medium"),
                         )}
                       >
+                        <span className="sr-only">{isToday ? "Demo as-of day " : ""}</span>
                         {day.day}
                       </p>
                       <div className="grid gap-1">
@@ -204,11 +217,13 @@ export function MonthCalendar() {
                               onClick={() =>
                                 setSelected({ dateKey: day.key, eventId: item.event.id })
                               }
+                              aria-label={`${item.client.name}, ${item.event.name}`}
                               className={cn(
-                                "w-full rounded-[2px] border-l-4 px-1.5 py-1 text-left text-[0.68rem] leading-snug",
+                                "w-full min-w-0 break-words rounded-[2px] border-l-4 px-1.5 py-1 text-left text-[0.68rem] leading-snug",
                                 item.event.status === "tentative"
                                   ? "bg-paper/90"
                                   : "bg-paper-raised",
+                                "hover:bg-accent-soft",
                                 selectedEvent && "outline outline-1 outline-focus",
                               )}
                               style={{ borderLeftColor: item.client.calendarColor }}
@@ -273,7 +288,7 @@ export function MonthCalendar() {
         </div>
       </div>
 
-      <div className="grid gap-6 border-t border-line pt-4 lg:grid-cols-[1fr_16rem]">
+      <div className="grid gap-6 border-t border-line pt-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,16rem)]">
         <div className="lg:hidden">
           <p className="mb-2 text-[0.7rem] tracking-[0.08em] text-ink-faint uppercase">
             Month as a list

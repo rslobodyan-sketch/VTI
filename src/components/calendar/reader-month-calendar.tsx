@@ -10,6 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import {
   calendarDateKey,
   defaultAssignedCalendarMonth,
+  isCalendarToday,
   shiftCalendarMonth,
   WEEKDAYS,
 } from "@/lib/calendar-grid";
@@ -62,6 +63,7 @@ export function ReaderMonthCalendar() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reader.id is the intended trigger
   }, [reader.id]);
 
+  const today = currentChicagoDate();
   const lastDay = daysInMonth(year, month);
   const leadBlanks = weekdaySundayIndex(year, month, 1);
   const rows = Math.ceil((leadBlanks + lastDay) / 7);
@@ -157,8 +159,13 @@ export function ReaderMonthCalendar() {
         {reader.contractorName} · {formatMonthTitle(year, month)}
       </p>
 
-      <div className="overflow-x-auto border border-line bg-paper-raised">
-        <div className="min-w-[20rem]">
+      <div
+        id="reader-calendar-grid"
+        className="w-full min-w-0 max-w-full overflow-x-auto border border-line bg-paper-raised"
+        role="grid"
+        aria-label={`${formatMonthTitle(year, month)} assigned ceremonies`}
+      >
+        <div className="w-full min-w-[20rem]">
           <div className="grid grid-cols-7 border-b border-line bg-paper-inset">
             {WEEKDAYS.map((label, index) => (
               <p
@@ -179,13 +186,19 @@ export function ReaderMonthCalendar() {
               const day = inMonth ? days[dayNumber - 1] : null;
               const weekend = index % 7 === 0 || index % 7 === 6;
               const selectedDay = Boolean(day && selected?.dateKey === day.key);
+              const isToday = Boolean(day && isCalendarToday(year, month, day.day, today));
+              const visibleEvents = day?.events.slice(0, 2) ?? [];
+              const overflow = day ? day.events.length - visibleEvents.length : 0;
               return (
                 <div
                   key={index}
+                  role="gridcell"
+                  aria-current={isToday ? "date" : undefined}
                   className={cn(
-                    "min-h-[4.5rem] border-b border-r border-line p-1 sm:min-h-[5.5rem]",
+                    "min-h-[4.5rem] min-w-0 overflow-hidden border-b border-r border-line p-1 sm:min-h-[5.5rem]",
                     !inMonth && "bg-paper-inset/60",
                     weekend && inMonth && "bg-[color-mix(in_srgb,var(--paper)_70%,var(--paper-inset))]",
+                    isToday && "bg-accent-soft/70",
                     selectedDay && "ring-1 ring-inset ring-focus",
                   )}
                 >
@@ -194,16 +207,19 @@ export function ReaderMonthCalendar() {
                       <p
                         className={cn(
                           "mb-1 text-xs tabular-nums",
-                          weekend ? "font-semibold text-ink-muted" : "font-medium",
+                          isToday && "inline-flex min-w-[1.35rem] items-center justify-center rounded-full bg-accent px-1 font-semibold text-paper-raised",
+                          !isToday && (weekend ? "font-semibold text-ink-muted" : "font-medium"),
                         )}
                       >
+                        <span className="sr-only">{isToday ? "Today " : ""}</span>
                         {day.day}
                       </p>
                       <div className="grid gap-1">
-                        {day.events.map((item) => {
+                        {visibleEvents.map((item) => {
                           const selectedEvent =
                             selected?.dateKey === day.key &&
                             selected.assignmentId === item.assignmentId;
+                          const first = item.ceremonies[0];
                           return (
                             <button
                               key={item.assignmentId}
@@ -214,9 +230,10 @@ export function ReaderMonthCalendar() {
                                   assignmentId: item.assignmentId,
                                 })
                               }
+                              aria-label={`${item.universityName}, ${item.eventName}${first ? `, ${first.name} ${formatTime(first.startsAt)}` : ""}`}
                               className={cn(
                                 "w-full rounded-[2px] border-l-4 px-1 py-0.5 text-left text-[0.65rem] leading-snug sm:text-[0.7rem]",
-                                "bg-paper-raised",
+                                "bg-paper-raised hover:bg-accent-soft",
                                 selectedEvent && "outline outline-1 outline-focus",
                               )}
                               style={{ borderLeftColor: item.calendarColor }}
@@ -224,14 +241,31 @@ export function ReaderMonthCalendar() {
                               <span className="block font-semibold text-ink">
                                 {item.universityName}
                               </span>
-                              <span className="block text-ink-muted">
-                                {item.ceremonies
-                                  .map((ceremony) => formatTime(ceremony.startsAt))
-                                  .join(" · ")}
-                              </span>
+                              {first ? (
+                                <span className="block truncate text-ink-muted">
+                                  {formatTime(first.startsAt)}
+                                  {item.ceremonies.length > 1
+                                    ? ` · ${item.ceremonies.length} ceremonies`
+                                    : ""}
+                                </span>
+                              ) : null}
                             </button>
                           );
                         })}
+                        {overflow > 0 ? (
+                          <button
+                            type="button"
+                            className="text-left text-[0.65rem] font-medium text-accent"
+                            onClick={() =>
+                              setSelected({
+                                dateKey: day.key,
+                                assignmentId: day.events[2].assignmentId,
+                              })
+                            }
+                          >
+                            +{overflow} more
+                          </button>
+                        ) : null}
                       </div>
                     </>
                   ) : null}

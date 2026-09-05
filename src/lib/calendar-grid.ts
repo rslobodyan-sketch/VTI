@@ -6,6 +6,15 @@ export function calendarDateKey(year: number, month: number, day: number) {
   return `${year}-${pad2(month)}-${pad2(day)}`;
 }
 
+export function isCalendarToday(
+  year: number,
+  month: number,
+  day: number,
+  today: { year: number; month: number; day: number },
+) {
+  return year === today.year && month === today.month && day === today.day;
+}
+
 export function shiftCalendarMonth(year: number, month: number, delta: number) {
   const next = new Date(Date.UTC(year, month - 1 + delta, 1));
   return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1 };

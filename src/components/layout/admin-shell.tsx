@@ -113,7 +113,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const drawerOpen = desktop || menuOpen;
 
   return (
-    <div className="min-h-dvh bg-paper text-ink lg:grid lg:grid-cols-[var(--sidebar-w)_1fr]">
+    <div className="min-h-dvh overflow-x-clip bg-paper text-ink lg:grid lg:grid-cols-[var(--sidebar-w)_minmax(0,1fr)]">
       <a href="#main-content" className="skip-link">
         Skip to content
       </a>
@@ -127,7 +127,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           "max-lg:fixed max-lg:inset-y-0 max-lg:left-0 max-lg:w-[min(19rem,calc(100vw-2.5rem))] max-lg:shadow-[var(--shadow-md)]",
           menuOpen ? "max-lg:translate-x-0" : "max-lg:-translate-x-full",
           !drawerOpen && "max-lg:invisible max-lg:pointer-events-none",
-          "flex flex-col transition-transform duration-150 lg:sticky lg:top-0 lg:h-dvh lg:translate-x-0",
+          "flex flex-col transition-transform duration-150 lg:sticky lg:top-0 lg:h-dvh lg:w-[var(--sidebar-w)] lg:max-w-[var(--sidebar-w)] lg:translate-x-0",
         )}
       >
         <div className="border-b border-white/10 px-4 py-4">
@@ -153,7 +153,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                         className={cn(
                           "flex min-h-10 items-center rounded-[var(--radius-md)] px-2.5 text-[0.9375rem]",
                           active
-                            ? "bg-white/14 text-white shadow-[inset_2px_0_0_0_#fbf9f4]"
+                            ? "bg-white/14 text-white shadow-[inset_2px_0_0_0_var(--focus)]"
                             : "text-white/78 hover:bg-white/8 hover:text-white",
                         )}
                         aria-current={active ? "page" : undefined}
@@ -221,7 +221,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 onFocus={() => setSearchOpen(true)}
                 onBlur={() => setTimeout(() => setSearchOpen(false), 180)}
                 placeholder="Search"
-                className="h-9 w-[min(42vw,11rem)] rounded-[var(--radius-md)] border border-line bg-paper px-2.5 text-sm sm:w-44 md:w-52 lg:w-64"
+                className="h-9 w-[min(42vw,11rem)] rounded-[var(--radius-md)] border border-line bg-paper px-2.5 text-sm sm:w-44 md:w-52 lg:w-40 xl:w-64"
               />
               {searchOpen && hits.length ? (
                 <ul className="absolute right-0 z-30 mt-1 w-[min(calc(100vw-1.5rem),20rem)] border border-line bg-paper-raised py-1 shadow-[var(--shadow-md)]">
@@ -247,7 +247,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 </ul>
               ) : null}
             </div>
-            <span className="hidden sm:inline-flex">
+            <span className="hidden xl:inline-flex">
               <Badge tone="warning" size="sm">
                 Tracking
               </Badge>
