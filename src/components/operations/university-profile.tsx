@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { Select } from "@/components/ui/select";
 import { TextLink } from "@/components/ui/text-link";
 import { useToast } from "@/components/ui/toast";
+import { DEMO_AS_OF } from "@/data/catalog";
 import { formatDate, formatMoney, formatShortDate } from "@/lib/format";
 import { labelize } from "@/lib/status";
 
@@ -29,6 +30,7 @@ export function UniversityProfileView({ id }: { id: string }) {
     patchClient,
     patchEvent,
     addContact,
+    addUniversityNote,
     ready,
   } = useOperations();
   const { notify } = useToast();
@@ -41,6 +43,7 @@ export function UniversityProfileView({ id }: { id: string }) {
   const [contactRole, setContactRole] = useState("");
   const [contactEmail, setContactEmail] = useState("");
   const [contactPhone, setContactPhone] = useState("");
+  const [noteBody, setNoteBody] = useState("");
 
   if (!client) {
     if (!ready) return <RecordPending />;
@@ -60,10 +63,10 @@ export function UniversityProfileView({ id }: { id: string }) {
     window: queries.eventWindow(event.id),
   }));
   const upcoming = dated
-    .filter((item) => (item.window?.start ?? "") >= "2026-08-28")
+    .filter((item) => (item.window?.start ?? "") >= DEMO_AS_OF)
     .sort((a, b) => (a.window?.start ?? "").localeCompare(b.window?.start ?? ""));
   const past = dated
-    .filter((item) => (item.window?.start ?? "") < "2026-08-28")
+    .filter((item) => (item.window?.start ?? "") < DEMO_AS_OF)
     .sort((a, b) => (b.window?.start ?? "").localeCompare(a.window?.start ?? ""));
   const lastEvent = past[0]?.event ?? dated.sort((a, b) => (b.window?.start ?? "").localeCompare(a.window?.start ?? ""))[0]?.event;
   const nextEvent = upcoming[0]?.event;
@@ -83,6 +86,18 @@ export function UniversityProfileView({ id }: { id: string }) {
 
   const workAgain = events.some((item) => item.workAgainRecommendation);
   const eventReady = events.some((item) => item.eventReady);
+  const internalNotes = queries.adminOnlyNotesForClient(client.id);
+  const eventDocs = events.flatMap((event) => queries.documentsForEvent(event.id));
+  const assignmentRows = events.flatMap((event) =>
+    queries
+      .assignmentsForEvent(event.id)
+      .map(queries.assignmentView)
+      .filter((item): item is NonNullable<typeof item> => Boolean(item)),
+  );
+  const ceremonyRows = events.flatMap((event) =>
+    queries.ceremoniesForEvent(event.id).map((ceremony) => ({ ceremony, event })),
+  );
+  const totals = queries.universityOperationalSummary(client.id);
 
   return (
     <div className="app-page">
@@ -186,6 +201,35 @@ export function UniversityProfileView({ id }: { id: string }) {
           View history
         </ButtonLink>
       </div>
+
+      <Section
+        title="Operational totals"
+        description="Rollup from events already on this university. Not an official VTI GRCD report. Tracked in VTI — Wave is official."
+      >
+        <div id="university-operational-totals">
+          <FactGrid
+            columns={4}
+            items={[
+              { label: "Graduates (estimated)", value: totals.graduates.toLocaleString() },
+              { label: "Readers", value: totals.readers.toString() },
+              { label: "Ceremonies", value: totals.ceremonies.toString() },
+              { label: "Days", value: totals.days.toString() },
+              { label: "Quoted", value: formatMoney(totals.quoteCents) },
+              { label: "Invoiced (tracked)", value: formatMoney(totals.invoicedCents) },
+              { label: "Reader compensation", value: formatMoney(totals.compensationCents) },
+              { label: "Expenses", value: formatMoney(totals.expenseCents) },
+              { label: "Estimated margin", value: formatMoney(totals.marginCents) },
+              ...(totals.priorYearGraduates
+                ? [{ label: "Last year names", value: totals.priorYearGraduates.toLocaleString() }]
+                : []),
+              ...(totals.priorYearQuoteCents
+                ? [{ label: "Last year quote", value: formatMoney(totals.priorYearQuoteCents) }]
+                : []),
+              { label: "Events", value: totals.events.toString() },
+            ]}
+          />
+        </div>
+      </Section>
 
       <Section title="Overview">
         <FactGrid
@@ -342,7 +386,7 @@ export function UniversityProfileView({ id }: { id: string }) {
                   <>
                     <TextLink href={`/admin/events/${event.id}`}>{event.name}</TextLink>
                     <p className="text-ink-muted">
-                      {(window?.start ?? "") >= "2026-08-28" ? "Upcoming" : "Past"}
+                      {(window?.start ?? "") >= DEMO_AS_OF ? "Upcoming" : "Past"}
                     </p>
                   </>
                 ),
@@ -363,6 +407,111 @@ export function UniversityProfileView({ id }: { id: string }) {
             };
           })}
         />
+      </Section>
+
+      <Section
+        title="Ceremonies, readers, and assignments"
+        description="Operational snapshot from events already on this university."
+      >
+        {ceremonyRows.length ? (
+          <ul className="mb-4 grid gap-2 text-sm">
+            {ceremonyRows.map(({ ceremony, event }) => (
+              <li key={ceremony.id}>
+                <TextLink href={`/admin/events/${event.id}`}>{event.name}</TextLink>
+                <span className="text-ink-muted">
+                  {" "}
+                  · {ceremony.name} · {formatDate(ceremony.startsAt)} · {ceremony.venueName}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mb-3 text-sm text-ink-muted">No ceremonies on file yet.</p>
+        )}
+        {assignmentRows.length ? (
+          <AdminTable
+            columns={[
+              { key: "reader", header: "Reader" },
+              { key: "event", header: "Event" },
+              { key: "role", header: "Role" },
+              { key: "status", header: "Status" },
+              { key: "pay", header: "Promised" },
+            ]}
+            rows={assignmentRows.map((item) => ({
+              id: item.id,
+              href: `/admin/assignments/${item.id}`,
+              title: item.reader.contractorName,
+              subtitle: item.event.name,
+              trailing: <StatusBadge kind="assignment" value={item.status} size="sm" />,
+              cells: {
+                reader: (
+                  <TextLink href={`/admin/assignments/${item.id}`}>
+                    {item.reader.contractorName}
+                  </TextLink>
+                ),
+                event: (
+                  <TextLink href={`/admin/events/${item.event.id}`}>{item.event.name}</TextLink>
+                ),
+                role: item.role,
+                status: <StatusBadge kind="assignment" value={item.status} />,
+                pay: <span className="tabular-nums">{formatMoney(item.promisedPayCents)}</span>,
+              },
+            }))}
+          />
+        ) : (
+          <p className="text-sm text-ink-muted">No reader assignments yet.</p>
+        )}
+      </Section>
+
+      <Section
+        title="Internal operational notes"
+        description="Admin only. Returning-university reminders such as negotiation, special pricing, services, preferences, and follow-up. Not shown to readers."
+      >
+        {client.notes ? (
+          <p className="mb-3 text-sm">{client.notes}</p>
+        ) : (
+          <p className="mb-3 text-sm text-ink-muted">No operational notes yet.</p>
+        )}
+        {internalNotes.length ? (
+          <ul className="mb-4 grid gap-3">
+            {internalNotes.map((note) => (
+              <li key={note.id} className="border border-line bg-paper-raised px-3 py-2.5 text-sm">
+                <p className="text-xs text-ink-faint">
+                  {note.authorName} · {formatShortDate(note.createdAt)}
+                </p>
+                <p className="mt-1">{note.body}</p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        <form
+          className="grid gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!noteBody.trim()) return;
+            addUniversityNote(client.id, noteBody.trim());
+            notify({ title: "Internal note saved (admin only)." });
+            setNoteBody("");
+          }}
+        >
+          <Field
+            id="uni-internal-note"
+            label="Add an internal note"
+            hint="Admin-only. Returning-university reminders stay on this record."
+          >
+            <Textarea
+              id="uni-internal-note"
+              value={noteBody}
+              onChange={(e) => setNoteBody(e.target.value)}
+              placeholder="Add an operational note"
+            />
+          </Field>
+          <div>
+            <Button type="submit" variant="secondary" size="sm">
+              Save internal note
+            </Button>
+          </div>
+        </form>
       </Section>
 
       <Section title="Compliance">
@@ -402,7 +551,10 @@ export function UniversityProfileView({ id }: { id: string }) {
         )}
       </Section>
 
-      <Section title="Billing">
+      <Section
+        title="Billing"
+        description="Tracked in VTI — Wave is official for invoices, estimates, and the general ledger."
+      >
         {profile ? (
           <FactGrid
             columns={3}
@@ -421,31 +573,52 @@ export function UniversityProfileView({ id }: { id: string }) {
       </Section>
 
       <Section title="Documents">
-        {profile?.documentPlaceholders.length ? (
-          <AdminTable
-            columns={[
-              { key: "name", header: "Document" },
-              { key: "type", header: "Type" },
-              { key: "status", header: "Status" },
-              { key: "date", header: "Date" },
-              { key: "expires", header: "Expiration" },
-            ]}
-            rows={profile.documentPlaceholders.map((doc) => ({
-              id: doc.id,
-              title: doc.name,
-              subtitle: doc.type,
-              trailing: (
-                <span className="text-sm text-ink-muted">{labelize(doc.status)}</span>
-              ),
-              cells: {
-                name: doc.name,
-                type: doc.type,
-                status: labelize(doc.status),
-                date: doc.date ? formatShortDate(doc.date) : "—",
-                expires: doc.expiresOn ? formatShortDate(doc.expiresOn) : "—",
-              },
-            }))}
-          />
+        {profile?.documentPlaceholders.length || eventDocs.length ? (
+          <>
+            {profile?.documentPlaceholders.length ? (
+              <AdminTable
+                columns={[
+                  { key: "name", header: "Document" },
+                  { key: "type", header: "Type" },
+                  { key: "status", header: "Status" },
+                  { key: "date", header: "Date" },
+                  { key: "expires", header: "Expiration" },
+                ]}
+                rows={profile.documentPlaceholders.map((doc) => ({
+                  id: doc.id,
+                  title: doc.name,
+                  subtitle: doc.type,
+                  trailing: (
+                    <span className="text-sm text-ink-muted">{labelize(doc.status)}</span>
+                  ),
+                  cells: {
+                    name: doc.name,
+                    type: doc.type,
+                    status: labelize(doc.status),
+                    date: doc.date ? formatShortDate(doc.date) : "—",
+                    expires: doc.expiresOn ? formatShortDate(doc.expiresOn) : "—",
+                  },
+                }))}
+              />
+            ) : null}
+            {eventDocs.length ? (
+              <ul className="mt-3 grid gap-2 text-sm">
+                {eventDocs.map((doc) => (
+                  <li key={doc.id}>
+                    {doc.originalFilename}
+                    <span className="text-ink-muted">
+                      {" "}
+                      · {doc.statusNote}
+                      {doc.visibleToAssignedReaders ? " · visible to assigned readers" : " · admin file"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="mt-2 text-xs text-ink-muted">
+              Filenames and status only. File bytes are not stored in this demo.
+            </p>
+          </>
         ) : (
           <EmptyState
             title="No documents"
@@ -463,7 +636,7 @@ export function UniversityProfileView({ id }: { id: string }) {
               value: firstEngagement ? formatShortDate(firstEngagement) : "Not yet",
             },
             { label: "Number of events", value: String(events.length) },
-            { label: "Total revenue", value: formatMoney(revenue || events.reduce((s, e) => s + e.quoteAmountCents, 0)) },
+            { label: "Total revenue (tracking)", value: formatMoney(revenue || events.reduce((s, e) => s + e.quoteAmountCents, 0)) },
             {
               label: "Last event",
               value: lastEvent?.name ?? "—",

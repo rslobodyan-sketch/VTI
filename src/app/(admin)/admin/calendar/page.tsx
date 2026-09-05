@@ -13,9 +13,10 @@ export default function AdminCalendarPage() {
         ]}
       />
       <p className="text-xs text-ink-muted">
-        November 2026 is the current operating month. Personal blocks are admin-only pending Chester’s confirmation.
+        The month opens on the nearest upcoming ceremony from the demo as-of date. Today returns to
+        that as-of month. Personal blocks are admin-only pending Chester’s confirmation.
       </p>
-      <MonthCalendar initialYear={2026} initialMonth={11} />
+      <MonthCalendar />
     </div>
   );
 }

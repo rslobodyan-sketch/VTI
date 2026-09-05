@@ -2,6 +2,8 @@ import { catalog, DEMO_CATALOG_REVISION, DEMO_DEFAULT_READER_ID } from "@/data/c
 import { dayKey, daysInMonth, pad2 } from "@/lib/format";
 import type {
   Assignment,
+  AssignmentRole,
+  AssignmentStatus,
   CalendarNote,
   CallSheet,
   Catalog,
@@ -9,7 +11,9 @@ import type {
   Client,
   EventRecord,
   ExpenseReport,
+  OperationalNote,
   ReaderCompensation,
+  ReaderDocument,
   ReaderProfile,
 } from "@/types/domain";
 
@@ -31,6 +35,31 @@ export type CalendarDayEvent = {
   notes: CalendarNote[];
   issues: string[];
 };
+
+/** Reader calendar cells — assigned work only, no quotes, other readers, or admin notes. */
+export type ReaderCalendarDayEvent = {
+  assignmentId: string;
+  eventId: string;
+  eventName: string;
+  universityName: string;
+  calendarColor: string;
+  role: AssignmentRole;
+  status: AssignmentStatus;
+  ceremonies: Array<{
+    id: string;
+    name: string;
+    startsAt: string;
+    endsAt: string;
+    venueName: string;
+  }>;
+};
+
+const ACTIVE_READER_STATUSES: AssignmentStatus[] = [
+  "offered",
+  "accepted",
+  "assigned",
+  "completed",
+];
 
 export function createQueries(data: Catalog) {
 function getClient(id: string) {
@@ -144,6 +173,83 @@ function notesForEvent(eventId: string) {
   return data.notes.filter((item) => item.eventId === eventId);
 }
 
+function notesForClient(clientId: string) {
+  return data.notes.filter((item) => item.clientId === clientId);
+}
+
+function adminOnlyNotesForClient(clientId: string): OperationalNote[] {
+  return notesForClient(clientId).filter((item) => item.visibility === "admin_only");
+}
+
+function readerVisibleNotesForEvent(eventId: string): OperationalNote[] {
+  return notesForEvent(eventId).filter((item) => item.visibility === "admin_and_assigned_readers");
+}
+
+function readerVisibleDocumentsForEvent(eventId: string) {
+  return documentsForEvent(eventId).filter((item) => item.visibleToAssignedReaders);
+}
+
+function readerProfileDocuments(readerId: string): ReaderDocument[] {
+  return documentsForReader(readerId).filter(
+    (item) => item.kind !== "drivers_license" && item.kind !== "passport",
+  );
+}
+
+function readerAssignmentView(assignment: Assignment, readerId: string): AssignmentView | null {
+  if (assignment.readerId !== readerId) return null;
+  const view = assignmentView(assignment);
+  if (!view) return null;
+  return { ...view, priorYearPayCents: undefined };
+}
+
+function readerAssignmentViews(readerId: string) {
+  return assignmentsForReader(readerId)
+    .map((item) => readerAssignmentView(item, readerId))
+    .filter((item): item is AssignmentView => Boolean(item));
+}
+
+/** Current-job pay only. Completed historical compensation stays on Admin. */
+function readerCurrentCompensation(readerId: string): ReaderCompensation[] {
+  const liveIds = new Set(
+    assignmentsForReader(readerId)
+      .filter((item) => item.status === "offered" || item.status === "accepted" || item.status === "assigned")
+      .map((item) => item.id),
+  );
+  return data.compensation.filter(
+    (item) => item.readerId === readerId && liveIds.has(item.assignmentId),
+  );
+}
+
+function readerCalendarDayEvents(readerId: string, dateKeyValue: string): ReaderCalendarDayEvent[] {
+  const rows: ReaderCalendarDayEvent[] = [];
+  for (const assignment of assignmentsForReader(readerId)) {
+    if (!ACTIVE_READER_STATUSES.includes(assignment.status)) continue;
+    const view = readerAssignmentView(assignment, readerId);
+    if (!view) continue;
+    const ceremonies = ceremoniesForEvent(assignment.eventId).filter(
+      (ceremony) => dayKey(ceremony.startsAt) === dateKeyValue,
+    );
+    if (!ceremonies.length) continue;
+    rows.push({
+      assignmentId: assignment.id,
+      eventId: view.event.id,
+      eventName: view.event.name,
+      universityName: view.client.name,
+      calendarColor: view.client.calendarColor,
+      role: view.role,
+      status: view.status,
+      ceremonies: ceremonies.map((ceremony) => ({
+        id: ceremony.id,
+        name: ceremony.name,
+        startsAt: ceremony.startsAt,
+        endsAt: ceremony.endsAt,
+        venueName: ceremony.venueName,
+      })),
+    });
+  }
+  return rows;
+}
+
 function eventsForClient(clientId: string) {
   return data.events.filter((item) => item.clientId === clientId);
 }
@@ -171,9 +277,7 @@ function allAssignmentViews() {
 }
 
 function upcomingAssignments(readerId = DEMO_DEFAULT_READER_ID) {
-  return assignmentsForReader(readerId)
-    .map(assignmentView)
-    .filter((item): item is AssignmentView => Boolean(item))
+  return readerAssignmentViews(readerId)
     .filter((item) => item.status !== "completed" && item.status !== "released_to_pool")
     .sort((a, b) => {
       const aStart = eventWindow(a.eventId)?.start ?? "";
@@ -347,6 +451,12 @@ function allExpenseReportViews() {
   return data.expenseReports.map(expenseReportView);
 }
 
+function readerExpenseReportViews(readerId: string) {
+  return data.expenseReports
+    .filter((item) => item.readerId === readerId)
+    .map(expenseReportView);
+}
+
 function compensationView(row: ReaderCompensation) {
   const reader = getReader(row.readerId);
   const assignment = getAssignment(row.assignmentId);
@@ -401,6 +511,109 @@ function monthIsoBounds(year: number, month: number) {
   };
 }
 
+function assignmentExpenseCents(assignmentId: string) {
+  return expensesForAssignment(assignmentId).reduce((sum, report) => {
+    return sum + linesForReport(report.id).reduce((inner, line) => inner + line.amountCents, 0);
+  }, 0);
+}
+
+function assignmentCompensationCents(assignmentId: string) {
+  return compensationForAssignment(assignmentId)
+    .filter((item) => item.kind === "compensation")
+    .reduce((sum, item) => sum + item.amountCents, 0);
+}
+
+function eventOperationalSummary(eventId: string) {
+  const event = getEvent(eventId);
+  const ceremonies = ceremoniesForEvent(eventId);
+  const assignments = assignmentsForEvent(eventId).filter((item) =>
+    ACTIVE_READER_STATUSES.includes(item.status),
+  );
+  const invoice = invoicesForEvent(eventId)[0];
+  const estimate = estimatesForEvent(eventId)[0];
+  const invoicedCents = invoicesForEvent(eventId).reduce((sum, item) => sum + item.amountCents, 0);
+  const compensationCents = assignments.reduce(
+    (sum, item) => sum + assignmentCompensationCents(item.id),
+    0,
+  );
+  const expenseCents = assignments.reduce((sum, item) => sum + assignmentExpenseCents(item.id), 0);
+  const quoteCents = event?.quoteAmountCents ?? 0;
+  return {
+    eventId,
+    graduates: event?.estimatedGraduateCount ?? 0,
+    priorYearGraduates: event?.priorYearGraduateCount,
+    readers: new Set(assignments.map((item) => item.readerId)).size,
+    ceremonies: ceremonies.length,
+    days: new Set(ceremonies.map((item) => dayKey(item.startsAt))).size,
+    quoteCents,
+    priorYearQuoteCents: event?.priorYearQuoteAmountCents,
+    invoicedCents,
+    invoiceStatus: invoice?.status,
+    estimateAmountCents: estimate?.amountCents,
+    estimateStatus: estimate?.status,
+    compensationCents,
+    expenseCents,
+    marginCents: quoteCents - compensationCents - expenseCents,
+  };
+}
+
+function universityOperationalSummary(clientId: string) {
+  const events = eventsForClient(clientId);
+  const summaries = events.map((event) => eventOperationalSummary(event.id));
+  const assignments = events.flatMap((event) =>
+    assignmentsForEvent(event.id).filter((item) => ACTIVE_READER_STATUSES.includes(item.status)),
+  );
+  const ceremonies = events.flatMap((event) => ceremoniesForEvent(event.id));
+  const priorYearGraduates = events.reduce((sum, event) => sum + (event.priorYearGraduateCount ?? 0), 0);
+  const priorYearQuoteCents = events.reduce(
+    (sum, event) => sum + (event.priorYearQuoteAmountCents ?? 0),
+    0,
+  );
+  const quoteCents = summaries.reduce((sum, item) => sum + item.quoteCents, 0);
+  const invoicedCents = summaries.reduce((sum, item) => sum + item.invoicedCents, 0);
+  const compensationCents = summaries.reduce((sum, item) => sum + item.compensationCents, 0);
+  const expenseCents = summaries.reduce((sum, item) => sum + item.expenseCents, 0);
+  return {
+    clientId,
+    events: events.length,
+    graduates: summaries.reduce((sum, item) => sum + item.graduates, 0),
+    priorYearGraduates: priorYearGraduates || undefined,
+    readers: new Set(assignments.map((item) => item.readerId)).size,
+    ceremonies: ceremonies.length,
+    days: new Set(ceremonies.map((item) => dayKey(item.startsAt))).size,
+    quoteCents,
+    priorYearQuoteCents: priorYearQuoteCents || undefined,
+    invoicedCents,
+    compensationCents,
+    expenseCents,
+    marginCents: quoteCents - compensationCents - expenseCents,
+  };
+}
+
+function readerAdminFinancialSummary(readerId: string) {
+  const jobs = assignmentsForReader(readerId);
+  const counted = jobs.filter((item) => ACTIVE_READER_STATUSES.includes(item.status));
+  const completed = jobs.filter((item) => item.status === "completed");
+  const currentCompensationCents = counted.reduce((sum, item) => sum + item.promisedPayCents, 0);
+  const priorYearPayCents = jobs.reduce((sum, item) => sum + (item.priorYearPayCents ?? 0), 0);
+  const expenseCents = readerExpenseReportViews(readerId).reduce(
+    (sum, item) => sum + item.totalCents,
+    0,
+  );
+  const paidCompensationCents = compensationForReader(readerId)
+    .filter((item) => item.kind === "compensation" && (item.status === "paid" || item.status === "cashed"))
+    .reduce((sum, item) => sum + item.amountCents, 0);
+  return {
+    readerId,
+    assignments: counted.length,
+    completedAssignments: completed.length,
+    currentCompensationCents,
+    priorYearPayCents: priorYearPayCents || undefined,
+    expenseCents,
+    paidCompensationCents,
+  };
+}
+
   return {
     getClient,
     getReader,
@@ -426,6 +639,15 @@ function monthIsoBounds(year: number, month: number) {
     documentsForEvent,
     documentsForReader,
     notesForEvent,
+    notesForClient,
+    adminOnlyNotesForClient,
+    readerVisibleNotesForEvent,
+    readerVisibleDocumentsForEvent,
+    readerProfileDocuments,
+    readerAssignmentView,
+    readerAssignmentViews,
+    readerCurrentCompensation,
+    readerCalendarDayEvents,
     eventsForClient,
     inquiriesForClient,
     assignmentView,
@@ -437,11 +659,15 @@ function monthIsoBounds(year: number, month: number) {
     operationalIssues,
     expenseReportView,
     allExpenseReportViews,
+    readerExpenseReportViews,
     compensationView,
     allCompensationViews,
     calendarDayEvents,
     personalBlocksOnDay,
     monthIsoBounds,
+    eventOperationalSummary,
+    universityOperationalSummary,
+    readerAdminFinancialSummary,
   };
 }
 
@@ -470,6 +696,15 @@ export const debriefsForEvent = seed.debriefsForEvent;
 export const documentsForEvent = seed.documentsForEvent;
 export const documentsForReader = seed.documentsForReader;
 export const notesForEvent = seed.notesForEvent;
+export const notesForClient = seed.notesForClient;
+export const adminOnlyNotesForClient = seed.adminOnlyNotesForClient;
+export const readerVisibleNotesForEvent = seed.readerVisibleNotesForEvent;
+export const readerVisibleDocumentsForEvent = seed.readerVisibleDocumentsForEvent;
+export const readerProfileDocuments = seed.readerProfileDocuments;
+export const readerAssignmentView = seed.readerAssignmentView;
+export const readerAssignmentViews = seed.readerAssignmentViews;
+export const readerCurrentCompensation = seed.readerCurrentCompensation;
+export const readerCalendarDayEvents = seed.readerCalendarDayEvents;
 export const eventsForClient = seed.eventsForClient;
 export const inquiriesForClient = seed.inquiriesForClient;
 export const assignmentView = seed.assignmentView;
@@ -481,9 +716,13 @@ export const eventsTouchingDay = seed.eventsTouchingDay;
 export const operationalIssues = seed.operationalIssues;
 export const expenseReportView = seed.expenseReportView;
 export const allExpenseReportViews = seed.allExpenseReportViews;
+export const readerExpenseReportViews = seed.readerExpenseReportViews;
 export const compensationView = seed.compensationView;
 export const allCompensationViews = seed.allCompensationViews;
 export const calendarDayEvents = seed.calendarDayEvents;
 export const personalBlocksOnDay = seed.personalBlocksOnDay;
 export const monthIsoBounds = seed.monthIsoBounds;
+export const eventOperationalSummary = seed.eventOperationalSummary;
+export const universityOperationalSummary = seed.universityOperationalSummary;
+export const readerAdminFinancialSummary = seed.readerAdminFinancialSummary;
 export { catalog, DEMO_CATALOG_REVISION };

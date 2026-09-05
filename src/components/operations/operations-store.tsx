@@ -30,7 +30,10 @@ import type {
   InquiryStage,
   InsuranceRequirement,
   Debrief,
+  OperationalNote,
   ReaderCompensation,
+  WorkspaceDocument,
+  WorkspaceDocumentCategory,
 } from "@/types/domain";
 import type {
   ActivityItem,
@@ -63,30 +66,44 @@ type Overlay = {
   compensationPatches: Record<string, Partial<ReaderCompensation>>;
   clientPatches: Record<string, Partial<Client>>;
   eventPatches: Record<string, Partial<EventRecord>>;
+  assignmentNotices: Record<string, { preparedAt: string; status: "prepared" }>;
+  notes: OperationalNote[];
+  workspaceDocuments: WorkspaceDocument[];
 };
 
-const emptyOverlay: Overlay = {
-  clients: [],
-  contacts: [],
-  inquiries: [],
-  events: [],
-  ceremonies: [],
-  assignments: [],
-  callSheets: [],
-  acknowledgements: [],
-  insurance: [],
-  expenseReports: [],
-  expenseLines: [],
-  debriefs: [],
-  compensation: [],
-  profiles: [],
-  activity: [],
-  assignmentStatus: {},
-  expenseStatus: {},
-  compensationPatches: {},
-  clientPatches: {},
-  eventPatches: {},
-};
+function blankOverlay(): Overlay {
+  return {
+    clients: [],
+    contacts: [],
+    inquiries: [],
+    events: [],
+    ceremonies: [],
+    assignments: [],
+    callSheets: [],
+    acknowledgements: [],
+    insurance: [],
+    expenseReports: [],
+    expenseLines: [],
+    debriefs: [],
+    compensation: [],
+    profiles: [],
+    activity: [],
+    assignmentStatus: {},
+    expenseStatus: {},
+    compensationPatches: {},
+    clientPatches: {},
+    eventPatches: {},
+    assignmentNotices: {},
+    notes: [],
+    workspaceDocuments: [],
+  };
+}
+
+const emptyOverlay: Overlay = blankOverlay();
+
+function asArray<T>(value: T[] | undefined | null): T[] {
+  return Array.isArray(value) ? value : [];
+}
 
 function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -105,13 +122,13 @@ function upsertProfiles(base: UniversityProfile[], extra: UniversityProfile[]): 
 }
 
 function mergeCatalog(overlay: Overlay): Catalog {
-  const assignments = upsert(seedCatalog.assignments, overlay.assignments).map((item) =>
-    overlay.assignmentStatus[item.id] ? { ...item, status: overlay.assignmentStatus[item.id] } : item,
+  const assignments = upsert(seedCatalog.assignments, asArray(overlay.assignments)).map((item) =>
+    overlay.assignmentStatus?.[item.id] ? { ...item, status: overlay.assignmentStatus[item.id] } : item,
   );
-  const expenseReports = upsert(seedCatalog.expenseReports, overlay.expenseReports).map((item) =>
-    overlay.expenseStatus[item.id] ? { ...item, status: overlay.expenseStatus[item.id] } : item,
+  const expenseReports = upsert(seedCatalog.expenseReports, asArray(overlay.expenseReports)).map((item) =>
+    overlay.expenseStatus?.[item.id] ? { ...item, status: overlay.expenseStatus[item.id] } : item,
   );
-  const overlayCompensation = overlay.compensation ?? [];
+  const overlayCompensation = asArray(overlay.compensation);
   const compensationBase = upsert(seedCatalog.compensation, overlayCompensation);
   const paidAssignmentIds = new Set(
     compensationBase
@@ -133,49 +150,91 @@ function mergeCatalog(overlay: Overlay): Catalog {
       ? { ...item, ...overlay.compensationPatches[item.id] }
       : item,
   );
-  const clients = upsert(seedCatalog.clients, overlay.clients).map((item) =>
-    overlay.clientPatches[item.id] ? { ...item, ...overlay.clientPatches[item.id] } : item,
+  const clients = upsert(seedCatalog.clients, asArray(overlay.clients)).map((item) =>
+    overlay.clientPatches?.[item.id] ? { ...item, ...overlay.clientPatches[item.id] } : item,
   );
-  const events = upsert(seedCatalog.events, overlay.events).map((item) =>
-    overlay.eventPatches[item.id] ? { ...item, ...overlay.eventPatches[item.id] } : item,
+  const events = upsert(seedCatalog.events, asArray(overlay.events)).map((item) =>
+    overlay.eventPatches?.[item.id] ? { ...item, ...overlay.eventPatches[item.id] } : item,
   );
   return {
     ...seedCatalog,
     clients,
-    contacts: upsert(seedCatalog.contacts, overlay.contacts),
-    inquiries: upsert(seedCatalog.inquiries, overlay.inquiries),
+    contacts: upsert(seedCatalog.contacts, asArray(overlay.contacts)),
+    inquiries: upsert(seedCatalog.inquiries, asArray(overlay.inquiries)),
     events,
-    ceremonies: upsert(seedCatalog.ceremonies, overlay.ceremonies),
+    ceremonies: upsert(seedCatalog.ceremonies, asArray(overlay.ceremonies)),
     assignments,
-    callSheets: upsert(seedCatalog.callSheets, overlay.callSheets),
-    acknowledgements: upsert(seedCatalog.acknowledgements, overlay.acknowledgements),
-    insurance: upsert(seedCatalog.insurance, overlay.insurance),
+    callSheets: upsert(seedCatalog.callSheets, asArray(overlay.callSheets)),
+    acknowledgements: upsert(seedCatalog.acknowledgements, asArray(overlay.acknowledgements)),
+    insurance: upsert(seedCatalog.insurance, asArray(overlay.insurance)),
     expenseReports,
-    expenseLines: upsert(seedCatalog.expenseLines, overlay.expenseLines),
+    expenseLines: upsert(seedCatalog.expenseLines, asArray(overlay.expenseLines)),
     compensation,
-    debriefs: upsert(seedCatalog.debriefs, overlay.debriefs),
+    debriefs: upsert(seedCatalog.debriefs, asArray(overlay.debriefs)),
+    notes: upsert(seedCatalog.notes, asArray(overlay.notes)),
   };
 }
 
-function loadOverlay(): Overlay {
-  if (typeof window === "undefined") return emptyOverlay;
+function readStoredOverlayRaw(): string | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
-    if (!raw) return emptyOverlay;
+    return window.localStorage.getItem(STORAGE_KEY) ?? window.sessionStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeOverlay(next: Overlay) {
+  const raw = JSON.stringify(next);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, raw);
+  } catch {
+    /* quota */
+  }
+  try {
+    window.sessionStorage.setItem(STORAGE_KEY, raw);
+  } catch {
+    /* quota / private mode */
+  }
+}
+
+function loadOverlay(): Overlay {
+  if (typeof window === "undefined") return blankOverlay();
+  try {
+    const raw = readStoredOverlayRaw();
+    if (!raw) return blankOverlay();
     const parsed = JSON.parse(raw) as Partial<Overlay>;
-    return {
-      ...emptyOverlay,
+    const next: Overlay = {
+      ...blankOverlay(),
       ...parsed,
-      expenseLines: parsed.expenseLines ?? [],
-      compensation: parsed.compensation ?? [],
-      compensationPatches: parsed.compensationPatches ?? {},
+      clients: asArray(parsed.clients),
+      contacts: asArray(parsed.contacts),
+      inquiries: asArray(parsed.inquiries),
+      events: asArray(parsed.events),
+      ceremonies: asArray(parsed.ceremonies),
+      assignments: asArray(parsed.assignments),
+      callSheets: asArray(parsed.callSheets),
+      acknowledgements: asArray(parsed.acknowledgements),
+      insurance: asArray(parsed.insurance),
+      expenseReports: asArray(parsed.expenseReports),
+      expenseLines: asArray(parsed.expenseLines),
+      debriefs: asArray(parsed.debriefs),
+      compensation: asArray(parsed.compensation),
+      profiles: asArray(parsed.profiles),
+      activity: asArray(parsed.activity),
       assignmentStatus: parsed.assignmentStatus ?? {},
       expenseStatus: parsed.expenseStatus ?? {},
+      compensationPatches: parsed.compensationPatches ?? {},
       clientPatches: parsed.clientPatches ?? {},
       eventPatches: parsed.eventPatches ?? {},
+      assignmentNotices: parsed.assignmentNotices ?? {},
+      notes: asArray(parsed.notes),
+      workspaceDocuments: asArray(parsed.workspaceDocuments),
     };
+    writeOverlay(next);
+    return next;
   } catch {
-    return emptyOverlay;
+    return blankOverlay();
   }
 }
 
@@ -240,6 +299,16 @@ type OperationsContextValue = {
   addCeremony: (eventId: string, ceremony: Omit<Ceremony, "id" | "eventId">) => void;
   patchEvent: (id: string, patch: Partial<EventRecord>) => void;
   confirmAssignment: (id: string) => void;
+  setAssignmentStatus: (id: string, status: AssignmentStatus) => void;
+  prepareAssignmentNotice: (assignmentId: string) => void;
+  assignmentNotice: (assignmentId: string) => { preparedAt: string; status: "prepared" } | undefined;
+  addUniversityNote: (clientId: string, body: string) => string;
+  addWorkspaceDocument: (input: {
+    filename: string;
+    category: WorkspaceDocumentCategory;
+    note: string;
+  }) => string;
+  workspaceDocuments: WorkspaceDocument[];
   submitDebrief: (input: Omit<Debrief, "id" | "submittedAt">) => string;
   reset: () => void;
   hasOverrides: boolean;
@@ -255,17 +324,20 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
   useLayoutEffect(() => {
     setOverlay(loadOverlay());
     setReady(true);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY || event.key === null) {
+        setOverlay(loadOverlay());
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
   }, []);
 
   const persist = useCallback((updater: Overlay | ((prev: Overlay) => Overlay)) => {
     flushSync(() => {
       setOverlay((prev) => {
         const next = typeof updater === "function" ? updater(prev) : updater;
-        try {
-          sessionStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-        } catch {
-          /* quota */
-        }
+        writeOverlay(next);
         return next;
       });
     });
@@ -1016,6 +1088,88 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     [persist],
   );
 
+  const setAssignmentStatus = useCallback(
+    (id: string, status: AssignmentStatus) => {
+      persist((prev) => ({
+        ...prev,
+        assignmentStatus: { ...prev.assignmentStatus, [id]: status },
+      }));
+    },
+    [persist],
+  );
+
+  const prepareAssignmentNotice = useCallback(
+    (assignmentId: string) => {
+      persist((prev) => ({
+        ...prev,
+        assignmentNotices: {
+          ...prev.assignmentNotices,
+          [assignmentId]: { preparedAt: new Date().toISOString(), status: "prepared" },
+        },
+      }));
+    },
+    [persist],
+  );
+
+  const assignmentNotice = useCallback(
+    (assignmentId: string) => overlay.assignmentNotices?.[assignmentId],
+    [overlay.assignmentNotices],
+  );
+
+  const addWorkspaceDocument = useCallback(
+    (input: { filename: string; category: WorkspaceDocumentCategory; note: string }) => {
+      const id = uid("wdoc");
+      persist((prev) => ({
+        ...prev,
+        workspaceDocuments: [
+          ...(prev.workspaceDocuments ?? []),
+          {
+            id,
+            filename: input.filename.trim(),
+            category: input.category,
+            note: input.note.trim(),
+            recordedAt: new Date().toISOString(),
+          },
+        ],
+      }));
+      return id;
+    },
+    [persist],
+  );
+
+  const addUniversityNote = useCallback(
+    (clientId: string, body: string) => {
+      const id = uid("on");
+      persist((prev) => ({
+        ...prev,
+        notes: [
+          ...prev.notes,
+          {
+            id,
+            clientId,
+            authorName: "Chester Tadeja",
+            visibility: "admin_only",
+            body,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+        activity: [
+          ...prev.activity,
+          {
+            id: uid("act"),
+            clientId,
+            at: new Date().toISOString(),
+            title: "Internal note added",
+            detail: "Admin-only operational note.",
+            href: `/admin/clients/${clientId}`,
+          },
+        ],
+      }));
+      return id;
+    },
+    [persist],
+  );
+
   const submitDebrief = useCallback(
     (input: Omit<Debrief, "id" | "submittedAt">) => {
       const id = uid("deb");
@@ -1043,7 +1197,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
   );
 
   const reset = useCallback(() => {
-    persist(emptyOverlay);
+    persist(blankOverlay());
     try {
       sessionStorage.removeItem("vti-demo-reader");
     } catch {
@@ -1071,7 +1225,10 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       Object.keys(overlay.expenseStatus).length +
       Object.keys(overlay.compensationPatches).length +
       Object.keys(overlay.clientPatches).length +
-      Object.keys(overlay.eventPatches).length >
+      Object.keys(overlay.eventPatches).length +
+      Object.keys(overlay.assignmentNotices ?? {}).length +
+      (overlay.notes?.length ?? 0) +
+      (overlay.workspaceDocuments?.length ?? 0) >
     0;
 
   const value = useMemo<OperationsContextValue>(
@@ -1105,6 +1262,12 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       addCeremony,
       patchEvent,
       confirmAssignment,
+      setAssignmentStatus,
+      prepareAssignmentNotice,
+      assignmentNotice,
+      addUniversityNote,
+      addWorkspaceDocument,
+      workspaceDocuments: overlay.workspaceDocuments ?? [],
       submitDebrief,
       reset,
       hasOverrides,
@@ -1140,6 +1303,12 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       addCeremony,
       patchEvent,
       confirmAssignment,
+      setAssignmentStatus,
+      prepareAssignmentNotice,
+      assignmentNotice,
+      addUniversityNote,
+      addWorkspaceDocument,
+      overlay.workspaceDocuments,
       submitDebrief,
       reset,
       hasOverrides,

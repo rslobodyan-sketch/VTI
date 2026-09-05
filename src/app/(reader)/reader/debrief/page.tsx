@@ -15,16 +15,11 @@ export default function ReaderDebriefPage() {
   const { catalog, queries, submitDebrief } = useOperations();
   const { notify } = useToast();
   const completed = queries
-    .assignmentsForReader(reader.id)
-    .map(queries.assignmentView)
-    .filter((item): item is NonNullable<typeof item> => item !== null && item.status === "completed");
+    .readerAssignmentViews(reader.id)
+    .filter((item) => item.status === "completed");
   const pending = queries
-    .assignmentsForReader(reader.id)
-    .map(queries.assignmentView)
-    .filter(
-      (item): item is NonNullable<typeof item> =>
-        item !== null && ["assigned", "accepted"].includes(item.status),
-    );
+    .readerAssignmentViews(reader.id)
+    .filter((item) => ["assigned", "accepted"].includes(item.status));
   const mine = catalog.debriefs.filter((item) => item.readerId === reader.id);
   const target = pending[0] ?? completed[0];
 

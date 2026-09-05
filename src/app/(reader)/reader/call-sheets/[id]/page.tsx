@@ -22,8 +22,8 @@ export default function ReaderCallSheetDetailPage() {
   const own = event
     ? queries
         .assignmentsForEvent(event.id)
-        .map(queries.assignmentView)
-        .find((item) => item?.readerId === reader.id)
+        .map((item) => queries.readerAssignmentView(item, reader.id))
+        .find((item) => item !== null)
     : undefined;
 
 

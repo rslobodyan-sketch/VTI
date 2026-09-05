@@ -36,6 +36,7 @@ export default function AdminReaderDetailPage({
   const emergency = catalog.emergencyContacts.find((item) => item.readerId === reader.id);
   const block = catalog.availability.find((item) => item.readerId === reader.id);
   const nextJob = jobs[0];
+  const finance = queries.readerAdminFinancialSummary(reader.id);
 
   return (
     <div className="app-page">
@@ -142,6 +143,27 @@ export default function AdminReaderDetailPage({
           ) : null}
         </Section>
       ) : null}
+
+      <Section
+        title="Admin financial summary"
+        description="This reader only. Prior-year pay is shown only when recorded on an assignment. Not visible on the reader packet."
+      >
+        <div id="reader-admin-financial-summary">
+          <FactGrid
+            columns={3}
+            items={[
+              { label: "Assignments", value: String(finance.assignments) },
+              { label: "Completed assignments", value: String(finance.completedAssignments) },
+              { label: "Reader compensation", value: formatMoney(finance.currentCompensationCents) },
+              { label: "Reader expenses", value: formatMoney(finance.expenseCents) },
+              { label: "Paid / cashed", value: formatMoney(finance.paidCompensationCents) },
+              ...(finance.priorYearPayCents
+                ? [{ label: "Prior-year pay (recorded)", value: formatMoney(finance.priorYearPayCents) }]
+                : []),
+            ]}
+          />
+        </div>
+      </Section>
 
       <Section title="Assignments">
         <AdminTable

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { notFound, useRouter } from "next/navigation";
+import { AssignmentNoticePanel } from "@/components/operations/assignment-notice";
 import { CallSheetDocument } from "@/components/call-sheet/call-sheet-document";
 import { Section } from "@/components/data/section";
 import { AdminTable } from "@/components/data/table";
@@ -23,7 +24,7 @@ import type { AssignmentRole } from "@/types/domain";
 
 export function EventDetailView({ id }: { id: string }) {
   const router = useRouter();
-  const { catalog, queries, offerAssignment, issueCallSheet, addCeremony, patchEvent, ready } =
+  const { catalog, queries, offerAssignment, issueCallSheet, addCeremony, patchEvent, assignmentNotice, ready } =
     useOperations();
   const { notify } = useToast();
   const [readerId, setReaderId] = useState("");
@@ -53,17 +54,12 @@ export function EventDetailView({ id }: { id: string }) {
   const estimate = queries.estimatesForEvent(event.id)[0];
   const invoice = queries.invoicesForEvent(event.id)[0];
   const debriefs = queries.debriefsForEvent(event.id);
-  const expenses = assignments.flatMap((item) => queries.expensesForAssignment(item.id));
-  const pay = assignments.flatMap((item) => queries.compensationForAssignment(item.id));
-  const expenseTotal = expenses.reduce((sum, report) => {
-    return (
-      sum +
-      queries.linesForReport(report.id).reduce((inner, line) => inner + line.amountCents, 0)
-    );
-  }, 0);
-  const payTotal = pay.reduce((sum, row) => sum + row.amountCents, 0);
-  const margin = event.quoteAmountCents - payTotal - expenseTotal;
-  const assignedIds = new Set(assignments.map((item) => item.readerId));
+  const ops = queries.eventOperationalSummary(event.id);
+  const assignedIds = new Set(
+    assignments
+      .filter((item) => item.status !== "declined" && item.status !== "released_to_pool")
+      .map((item) => item.readerId),
+  );
   const available = catalog.readers.filter((reader) => !assignedIds.has(reader.id));
   const unsigned = assignments.filter((item) => callSheet && !item.acknowledged);
 
@@ -243,6 +239,7 @@ export function EventDetailView({ id }: { id: string }) {
             { key: "role", header: "Role" },
             { key: "status", header: "Status" },
             { key: "promised", header: "Compensation" },
+            { key: "notice", header: "Notice" },
             { key: "travel", header: "Travel" },
           ]}
           rows={assignments.map((item) => ({
@@ -260,6 +257,9 @@ export function EventDetailView({ id }: { id: string }) {
               role: item.role,
               status: <StatusBadge kind="assignment" value={item.status} />,
               promised: <span className="tabular-nums">{formatMoney(item.promisedPayCents)}</span>,
+              notice: assignmentNotice(item.id)
+                ? "Notification prepared"
+                : "Not prepared",
               travel: item.logisticsStatus ?? "See event travel",
             },
           }))}
@@ -316,6 +316,13 @@ export function EventDetailView({ id }: { id: string }) {
             </div>
           </form>
         ) : null}
+        {assignments
+          .filter((item) => item.status === "offered" || item.status === "accepted")
+          .map((item) => (
+            <div key={`notice-${item.id}`} className="mt-3">
+              <AssignmentNoticePanel view={item} />
+            </div>
+          ))}
       </Section>
 
       <Section title="Operational documents">
@@ -336,24 +343,43 @@ export function EventDetailView({ id }: { id: string }) {
         </ul>
       </Section>
 
-      <Section title="Event financials" description="Tracking only — payment processing is not connected.">
-        <FactGrid
-          columns={3}
-          items={[
-            { label: "Quote", value: formatMoney(event.quoteAmountCents) },
-            {
-              label: "Invoice",
-              value: invoice ? <StatusBadge kind="invoice" value={invoice.status} /> : "Not billed",
-            },
-            { label: "Reader compensation", value: formatMoney(payTotal) },
-            { label: "Reimbursements / expenses", value: formatMoney(expenseTotal) },
-            { label: "Estimated margin", value: formatMoney(margin) },
-            {
-              label: "Estimate",
-              value: estimate ? `${formatMoney(estimate.amountCents)} · ${estimate.status}` : "None",
-            },
-          ]}
-        />
+      <Section
+        title="Event financials"
+        description="Operational totals for this event. Not an official VTI GRCD report. Tracked in VTI — Wave is official."
+      >
+        <div id="event-operational-totals">
+          <FactGrid
+            columns={4}
+            items={[
+              { label: "Graduates (estimated)", value: ops.graduates.toLocaleString() },
+              { label: "Readers", value: String(ops.readers) },
+              { label: "Ceremonies", value: String(ops.ceremonies) },
+              { label: "Days", value: String(ops.days) },
+              { label: "Quote", value: formatMoney(ops.quoteCents) },
+              {
+                label: "Invoice",
+                value: invoice ? <StatusBadge kind="invoice" value={invoice.status} /> : "Not billed",
+              },
+              { label: "Reader compensation", value: formatMoney(ops.compensationCents) },
+              { label: "Reimbursements / expenses", value: formatMoney(ops.expenseCents) },
+              { label: "Estimated margin", value: formatMoney(ops.marginCents) },
+              {
+                label: "Estimate",
+                value: estimate ? `${formatMoney(estimate.amountCents)} · ${estimate.status}` : "None",
+              },
+              ...(ops.priorYearGraduates
+                ? [{ label: "Last year names", value: ops.priorYearGraduates.toLocaleString() }]
+                : []),
+              ...(ops.priorYearQuoteCents
+                ? [{ label: "Last year quote", value: formatMoney(ops.priorYearQuoteCents) }]
+                : []),
+            ]}
+          />
+        </div>
+        <p className="text-xs text-ink-muted">
+          Reader pay initiation is intended for Patriot. Neither Wave nor Patriot is connected in this
+          demo.
+        </p>
       </Section>
 
       <Section title="Event notes">
@@ -376,7 +402,20 @@ export function EventDetailView({ id }: { id: string }) {
           >
             Mark work-again / event-ready
           </Button>
-          {callSheet ? null : (
+          {callSheet ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => {
+                const nextVersion = Math.max(0, ...versions.map((item) => item.version)) + 1;
+                const sheetId = issueCallSheet(event.id);
+                notify({ title: `Call Sheet v${nextVersion} issued. Prior issued version is superseded.` });
+                router.push(`/admin/call-sheets/${sheetId}`);
+              }}
+            >
+              Issue new Call Sheet version
+            </Button>
+          ) : (
             <Button
               size="sm"
               onClick={() => {

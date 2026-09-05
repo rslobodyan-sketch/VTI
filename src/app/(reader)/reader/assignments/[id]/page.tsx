@@ -18,7 +18,7 @@ export default function ReaderAssignmentHubPage() {
   const { isAcknowledged, assignmentStatus, expenseStatus } = useDemoSession();
   const queries = useLiveQueries();
   const assignment = queries.getAssignment(params.id);
-  const view = assignment ? queries.assignmentView(assignment) : null;
+  const view = assignment ? queries.readerAssignmentView(assignment, reader.id) : null;
 
   if (!view || view.readerId !== reader.id) {
     return (
@@ -40,10 +40,8 @@ export default function ReaderAssignmentHubPage() {
 
   const ceremonies = queries.ceremoniesForEvent(view.eventId);
   const callSheet = queries.currentCallSheet(view.eventId);
-  const files = queries.documentsForEvent(view.eventId).filter((item) => item.visibleToAssignedReaders);
-  const notes = queries.notesForEvent(view.eventId).filter(
-    (item) => item.visibility === "admin_and_assigned_readers",
-  );
+  const files = queries.readerVisibleDocumentsForEvent(view.eventId);
+  const notes = queries.readerVisibleNotesForEvent(view.eventId);
   const expense = queries.expensesForAssignment(view.id)[0];
   const liveStatus = assignmentStatus(view.id, view.status);
   const acked = callSheet
@@ -72,9 +70,8 @@ export default function ReaderAssignmentHubPage() {
 
       <section className="grid gap-1.5 border-y border-line py-4 text-sm">
         <p>
-          <span className="text-ink-faint">Your pay </span>
+          <span className="text-ink-faint">Your pay for this assignment </span>
           {formatMoney(view.promisedPayCents)}
-          {view.priorYearPayCents ? ` · last year ${formatMoney(view.priorYearPayCents)}` : ""}
         </p>
         <p>
           <span className="text-ink-faint">Travel </span>

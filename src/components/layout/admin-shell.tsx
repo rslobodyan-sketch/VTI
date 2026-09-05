@@ -290,7 +290,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
             />
           </div>
         </header>
-        <main id="main-content" className="flex-1 px-3 py-5 sm:px-5 lg:px-7">
+        <main id="main-content" className="min-w-0 flex-1 px-3 py-5 sm:px-5 lg:px-7">
           <div className="mx-auto w-full max-w-[88rem]">{children}</div>
         </main>
       </div>

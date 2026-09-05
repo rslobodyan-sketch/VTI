@@ -25,7 +25,7 @@ export function ReaderShell({ children }: { children: ReactNode }) {
       <a href="#reader-main" className="skip-link">
         Skip to content
       </a>
-      <header className="sticky top-0 z-20 border-b border-line bg-paper-raised px-3 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5">
+      <header className="sticky top-0 z-20 border-b border-line bg-paper-raised px-3 pt-[max(0.65rem,env(safe-area-inset-top))] pb-2.5 no-print">
         <div className="mx-auto flex max-w-2xl items-center justify-between gap-2">
           <div>
             <p className="font-serif text-base leading-none">VTI Reader</p>
@@ -100,14 +100,14 @@ export function ReaderShell({ children }: { children: ReactNode }) {
 
       <main
         id="reader-main"
-        className="mx-auto w-full max-w-lg px-3 pt-4 pb-[calc(var(--bottom-nav-h)+0.85rem+env(safe-area-inset-bottom))] md:max-w-2xl md:pb-8"
+        className="mx-auto w-full min-w-0 max-w-lg px-3 pt-4 pb-[calc(var(--bottom-nav-h)+0.85rem+env(safe-area-inset-bottom))] md:max-w-3xl md:pb-8"
       >
         {ready ? children : <p className="text-sm text-ink-muted">Loading assignment…</p>}
       </main>
 
       <nav
         aria-label="Reader primary"
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper-raised pb-[env(safe-area-inset-bottom)] md:hidden"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-line bg-paper-raised pb-[env(safe-area-inset-bottom)] md:hidden no-print"
       >
         <ul className="grid grid-cols-5">
           {readerBottomNav.map((item) => {

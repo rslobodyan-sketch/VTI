@@ -144,14 +144,16 @@ export function CallSheetDocument({
           <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Travel</span>
           {callSheet.travelNotes}
         </p>
-        <p>
-          <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Airfare</span>
-          {callSheet.airfareNotes}
-        </p>
+        {viewer === "admin" ? (
+          <p>
+            <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Airfare</span>
+            {callSheet.airfareNotes}
+          </p>
+        ) : null}
         <p>
           <span className="block text-[0.7rem] tracking-[0.06em] text-ink-faint uppercase">Lodging</span>
           {callSheet.accommodationNotes}
-          {callSheet.hotelEstimateCents ? (
+          {viewer === "admin" && callSheet.hotelEstimateCents ? (
             <span className="block text-ink-muted">
               Hotel estimate {formatMoney(callSheet.hotelEstimateCents)}
             </span>
@@ -179,12 +181,6 @@ export function CallSheetDocument({
           <p className="mt-2">
             Promised for this assignment:{" "}
             <span className="font-medium">{formatMoney(own.assignment.promisedPayCents)}</span>
-            {own.assignment.priorYearPayCents ? (
-              <span className="text-ink-muted">
-                {" "}
-                · last year {formatMoney(own.assignment.priorYearPayCents)}
-              </span>
-            ) : null}
             <span className="mt-1 block text-xs text-ink-faint">
               Other readers’ compensation is never shown on this packet.
             </span>

@@ -2,27 +2,27 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useLiveQueries } from "@/components/operations/operations-store";
+import { useLiveQueries, useOperations } from "@/components/operations/operations-store";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DEMO_AS_OF } from "@/data/catalog";
 import { cn } from "@/lib/cn";
 import {
+  calendarDateKey,
+  defaultAssignedCalendarMonth,
+  shiftCalendarMonth,
+  WEEKDAYS,
+} from "@/lib/calendar-grid";
+import {
+  dayKey,
   daysInMonth,
   formatMoney,
   formatMonthTitle,
   formatTime,
-  pad2,
   weekdaySundayIndex,
 } from "@/lib/format";
 import { labelize } from "@/lib/status";
 import type { CalendarDayEvent } from "@/data/queries";
-
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-function dateKey(year: number, month: number, day: number) {
-  return `${year}-${pad2(month)}-${pad2(day)}`;
-}
 
 function assignmentSignal(item: CalendarDayEvent): string {
   const live = item.assignments.filter((row) =>
@@ -47,16 +47,21 @@ function travelBits(item: CalendarDayEvent): string[] {
   return bits;
 }
 
-export function MonthCalendar({
-  initialYear = 2026,
-  initialMonth = 11,
-}: {
-  initialYear?: number;
-  initialMonth?: number;
-}) {
+function demoAsOfDate() {
+  const [year, month, day] = DEMO_AS_OF.split("-").map(Number);
+  return { year, month, day };
+}
+
+export function MonthCalendar() {
   const queries = useLiveQueries();
-  const [year, setYear] = useState(initialYear);
-  const [month, setMonth] = useState(initialMonth);
+  const { catalog } = useOperations();
+  const asOf = demoAsOfDate();
+  const [{ year, month }, setView] = useState(() =>
+    defaultAssignedCalendarMonth(
+      catalog.ceremonies.map((ceremony) => dayKey(ceremony.startsAt)),
+      asOf,
+    ),
+  );
   const [selected, setSelected] = useState<{
     dateKey: string;
     eventId: string;
@@ -72,7 +77,7 @@ export function MonthCalendar({
 
   const days = Array.from({ length: lastDay }, (_, index) => {
     const day = index + 1;
-    const key = dateKey(year, month, day);
+    const key = calendarDateKey(year, month, day);
     return {
       day,
       key,
@@ -86,9 +91,7 @@ export function MonthCalendar({
     : undefined;
 
   function shiftMonth(delta: number) {
-    const next = new Date(Date.UTC(year, month - 1 + delta, 1));
-    setYear(next.getUTCFullYear());
-    setMonth(next.getUTCMonth() + 1);
+    setView((current) => shiftCalendarMonth(current.year, current.month, delta));
     setSelected(null);
   }
 
@@ -101,30 +104,22 @@ export function MonthCalendar({
             Operational month · America/Chicago · consecutive days share university color
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => shiftMonth(-1)}>
             Previous
           </Button>
+          <p className="min-w-[7.5rem] px-2 text-center text-sm font-medium tabular-nums" aria-live="polite">
+            {formatMonthTitle(year, month)}
+          </p>
           <Button
             variant="secondary"
             size="sm"
             onClick={() => {
-              const asOf = new Date(`${DEMO_AS_OF}T12:00:00.000Z`);
-              setYear(asOf.getUTCFullYear());
-              setMonth(asOf.getUTCMonth() + 1);
+              setView({ year: asOf.year, month: asOf.month });
+              setSelected(null);
             }}
           >
             Today
-          </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setYear(2026);
-              setMonth(11);
-            }}
-          >
-            Nov 2026
           </Button>
           <Button variant="secondary" size="sm" onClick={() => shiftMonth(1)}>
             Next

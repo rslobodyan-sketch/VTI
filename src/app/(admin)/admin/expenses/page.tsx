@@ -78,6 +78,7 @@ function AdminExpensesPageBody({ status }: { status?: string }) {
         {rows.find((item) => item.report.submittedAt)
           ? ` · last ${formatShortDate(rows.find((item) => item.report.submittedAt)!.report.submittedAt!)}`
           : ""}
+        . Reimbursement payout is approved separately on Payments. Receipts are filenames only.
       </p>
     </div>
   );

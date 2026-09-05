@@ -253,6 +253,13 @@ export type CallSheetAcknowledgement = {
   method: "click_accept";
 };
 
+/** Overlay-only. Email is not connected — this records that a notice was prepared. */
+export type AssignmentNotice = {
+  assignmentId: string;
+  preparedAt: string;
+  status: "prepared";
+};
+
 export type EventDocument = {
   id: string;
   eventId: string;
@@ -348,6 +355,8 @@ export type ReaderCompensation = {
   approvedAt?: string;
   paidOn?: string;
   cashedOn?: string;
+  /** Tracking-only check / reference number. Not a bank confirmation. */
+  checkNumber?: string;
 };
 
 export type ExpenseReport = {
@@ -396,6 +405,17 @@ export type OperationalNote = {
   visibility: "admin_only" | "admin_and_assigned_readers";
   body: string;
   createdAt: string;
+};
+
+/** Filename-only workspace record. Bytes are not stored. */
+export type WorkspaceDocumentCategory = "rate_sheet" | "operational" | "other";
+
+export type WorkspaceDocument = {
+  id: string;
+  filename: string;
+  category: WorkspaceDocumentCategory;
+  note: string;
+  recordedAt: string;
 };
 
 export type Catalog = {

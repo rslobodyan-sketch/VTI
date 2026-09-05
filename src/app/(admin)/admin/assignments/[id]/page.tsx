@@ -2,6 +2,7 @@
 
 import { use } from "react";
 import { notFound } from "next/navigation";
+import { AssignmentNoticePanel } from "@/components/operations/assignment-notice";
 import { Section } from "@/components/data/section";
 import { StatusBadge } from "@/components/status/status-badge";
 import { useOperations } from "@/components/operations/operations-store";
@@ -20,7 +21,7 @@ export default function AdminAssignmentDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const { catalog, queries, confirmAssignment, ready } = useOperations();
+  const { catalog, queries, confirmAssignment, setAssignmentStatus, ready } = useOperations();
   const { notify } = useToast();
   const assignment = queries.getAssignment(id);
   if (!assignment) {
@@ -38,7 +39,13 @@ export default function AdminAssignmentDetailPage({
 
   const pool = queries.allAssignmentViews().filter((item) => item.eventId === view.eventId);
   const available = catalog.readers.filter(
-    (reader) => !pool.some((item) => item.readerId === reader.id && item.status !== "released_to_pool"),
+    (reader) =>
+      !pool.some(
+        (item) =>
+          item.readerId === reader.id &&
+          item.status !== "released_to_pool" &&
+          item.status !== "declined",
+      ),
   );
 
   return (
@@ -78,7 +85,48 @@ export default function AdminAssignmentDetailPage({
             Confirm assignment
           </Button>
         ) : null}
+        {view.status === "offered" || view.status === "accepted" ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setAssignmentStatus(view.id, "declined");
+              notify({ title: "Assignment declined." });
+            }}
+          >
+            Decline offer
+          </Button>
+        ) : null}
+        {view.status === "assigned" ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              setAssignmentStatus(view.id, "completed");
+              notify({ title: "Assignment marked completed." });
+            }}
+          >
+            Mark completed
+          </Button>
+        ) : null}
+        {view.status === "offered" || view.status === "accepted" || view.status === "assigned" ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setAssignmentStatus(view.id, "released_to_pool");
+              notify({
+                title: "Released to the reader pool.",
+                message: "The assignment is no longer active for this reader.",
+              });
+            }}
+          >
+            Release to pool
+          </Button>
+        ) : null}
       </div>
+
+      <AssignmentNoticePanel view={view} />
 
       <FactGrid
         columns={2}

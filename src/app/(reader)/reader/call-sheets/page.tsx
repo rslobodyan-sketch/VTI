@@ -6,13 +6,22 @@ import { TouchRow } from "@/components/reader/touch-row";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { useLiveQueries } from "@/components/operations/operations-store";
+import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
 
 export default function ReaderCallSheetsPage() {
   const { reader } = useDemoReader();
   const { isAcknowledged } = useDemoSession();
-  const queries = useLiveQueries();
-  const eventIds = [...new Set(queries.assignmentsForReader(reader.id).map((item) => item.eventId))];
+  const { queries, ready } = useOperations();
+  if (!ready) return <RecordPending />;
+  const eventIds = [
+    ...new Set(
+      queries
+        .readerAssignmentViews(reader.id)
+        .filter((item) => item.status !== "released_to_pool")
+        .map((item) => item.eventId),
+    ),
+  ];
   const sheets = eventIds.flatMap((eventId) => {
     const current = queries.currentCallSheet(eventId);
     const event = queries.getEvent(eventId);

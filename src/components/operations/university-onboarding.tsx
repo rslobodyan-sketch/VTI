@@ -1,7 +1,7 @@
 "use client";
 
 import { notFound, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useOperations } from "@/components/operations/operations-store";
 import { RecordPending } from "@/components/operations/record-pending";
 import { Button } from "@/components/ui/button";
@@ -225,14 +225,6 @@ export function UniversityOnboarding({ existingId }: { existingId?: string }) {
   function set<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
-
-  const stepValid = useMemo(() => {
-    if (step === 0) return Boolean(form.name.trim() && form.city.trim() && form.region.trim());
-    if (step === 1) {
-      return Boolean(form.primaryName.trim() && form.primaryEmail.trim() && form.primaryPhone.trim());
-    }
-    return true;
-  }, [form, step]);
 
   function validateStep(target: number) {
     const next: Record<string, string> = {};
@@ -913,7 +905,7 @@ export function UniversityOnboarding({ existingId }: { existingId?: string }) {
           {step === 0 ? "Cancel" : "Back"}
         </Button>
         {step < STEPS.length - 1 ? (
-          <Button onClick={nextStep} disabled={!stepValid && (step === 0 || step === 1)}>
+          <Button onClick={nextStep}>
             Continue
           </Button>
         ) : (

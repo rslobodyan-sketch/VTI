@@ -9,7 +9,9 @@ import { useOperations } from "@/components/operations/operations-store";
 import { RecordPending } from "@/components/operations/record-pending";
 import { Button } from "@/components/ui/button";
 import { ButtonLink } from "@/components/ui/button-link";
+import { FactGrid } from "@/components/ui/fact-grid";
 import { PageHeader } from "@/components/ui/page-header";
+import { TextLink } from "@/components/ui/text-link";
 import { useToast } from "@/components/ui/toast";
 import { formatMoney, formatShortDate } from "@/lib/format";
 
@@ -59,6 +61,42 @@ export default function AdminExpenseDetailPage({
             : ""}
       </p>
 
+      <div id="expense-associations">
+        <FactGrid
+          columns={3}
+          items={[
+            {
+              label: "University",
+              value: view.client ? (
+                <TextLink href={`/admin/clients/${view.client.id}`}>{view.client.name}</TextLink>
+              ) : (
+                "—"
+              ),
+            },
+            {
+              label: "Event",
+              value: view.event ? (
+                <TextLink href={`/admin/events/${view.event.id}`}>{view.event.name}</TextLink>
+              ) : (
+                "—"
+              ),
+            },
+            {
+              label: "Assignment",
+              value: view.assignment ? (
+                <TextLink href={`/admin/assignments/${view.assignment.id}`}>
+                  {view.reader?.contractorName ?? "Assignment"}
+                </TextLink>
+              ) : (
+                "—"
+              ),
+            },
+            { label: "Amount", value: formatMoney(view.totalCents) },
+            { label: "Lines", value: String(view.lines.length) },
+          ]}
+        />
+      </div>
+
       <Section title="Lines">
         <AdminTable
           columns={[
@@ -83,6 +121,9 @@ export default function AdminExpenseDetailPage({
           }))}
         />
         <p className="mt-3 text-sm font-medium">Total {formatMoney(view.totalCents)}</p>
+        <p className="mt-1 text-xs text-ink-muted">
+          Receipt column is the filename. Image bytes are not stored in this demo.
+        </p>
       </Section>
 
       {view.report.status === "submitted" ? (

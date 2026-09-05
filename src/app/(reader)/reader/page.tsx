@@ -7,15 +7,18 @@ import { StatusBadge } from "@/components/status/status-badge";
 import { ButtonLink } from "@/components/ui/button-link";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { useLiveQueries } from "@/components/operations/operations-store";
+import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
 import { InstallHint } from "@/components/pwa/install-hint";
 import { formatDate, formatMoney } from "@/lib/format";
 
 export default function ReaderHomePage() {
   const { reader } = useDemoReader();
   const { isAcknowledged, expenseStatus } = useDemoSession();
-  const queries = useLiveQueries();
+  const { queries, ready } = useOperations();
   const upcoming = queries.upcomingAssignments(reader.id);
+
+  if (!ready) return <RecordPending />;
   const next = upcoming[0];
 
   if (!next) {
@@ -63,8 +66,7 @@ export default function ReaderHomePage() {
           {callSheet ? <StatusBadge kind="callsheet" value={callSheet.status} /> : null}
         </div>
         <p className="mt-3 text-sm">
-          Your compensation: {formatMoney(next.promisedPayCents)}
-          {next.priorYearPayCents ? ` · last year ${formatMoney(next.priorYearPayCents)}` : ""}
+          Your compensation for this assignment: {formatMoney(next.promisedPayCents)}
         </p>
         <p className="text-sm text-ink-muted">{next.event.travelNotes}</p>
         <ButtonLink href={`/reader/assignments/${next.id}`} className="mt-4 w-full min-h-12">

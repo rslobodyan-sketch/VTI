@@ -5,6 +5,7 @@ import { AdminTable } from "@/components/data/table";
 import { StatusBadge } from "@/components/status/status-badge";
 import { useOperations } from "@/components/operations/operations-store";
 import { Button } from "@/components/ui/button";
+import { FactGrid } from "@/components/ui/fact-grid";
 import { PageHeader } from "@/components/ui/page-header";
 import { TextLink } from "@/components/ui/text-link";
 import { useToast } from "@/components/ui/toast";
@@ -22,22 +23,42 @@ export default function AdminPaymentsPage() {
   }));
   const compensation = pay.filter((item) => item.row.kind !== "reimbursement");
   const reimbursements = pay.filter((item) => item.row.kind === "reimbursement");
+  const invoiceOutstanding = invoices.reduce((sum, item) => {
+    const receivedCents = item.received.reduce((inner, row) => inner + row.amountCents, 0);
+    return sum + Math.max(0, item.invoice.amountCents - receivedCents);
+  }, 0);
+  const payAwaitingApproval = compensation
+    .filter((item) => item.row.status === "promised" || item.row.status === "pending_approval")
+    .reduce((sum, item) => sum + item.row.amountCents, 0);
+  const reimbAwaitingApproval = reimbursements
+    .filter((item) => item.row.status === "promised" || item.row.status === "pending_approval")
+    .reduce((sum, item) => sum + item.row.amountCents, 0);
 
   return (
     <div className="app-page">
       <PageHeader
         title="Payment tracking"
-        description="Tracking only — payment processing is not connected. Chester must approve every reader payment before it can be marked paid."
+        description="Tracked in VTI — Wave is official for university invoices, estimates, and the general ledger. Patriot remains the intended reader pay initiator. Chester must approve every reader payment. Nothing is paid automatically."
         breadcrumbs={[
           { href: "/admin", label: "Dashboard" },
           { label: "Payments" },
         ]}
       />
+      <FactGrid
+        columns={3}
+        items={[
+          { label: "University outstanding (tracking)", value: formatMoney(invoiceOutstanding) },
+          { label: "Compensation awaiting Chester", value: formatMoney(payAwaitingApproval) },
+          { label: "Reimbursements awaiting Chester", value: formatMoney(reimbAwaitingApproval) },
+        ]}
+      />
       <p className="text-sm text-ink-muted">
-        University receivables and reader payables are tracked here for operations. External ledgers remain the official source when connected later.
+        Three ledgers: what universities owe VTI, what VTI owes readers for assignments, and what VTI
+        owes for receipts. Wave and Patriot are not connected — do not treat these totals as the
+        official books.
       </p>
 
-      <Section title="University receivables">
+      <Section title="University receivables" description="Tracked in VTI — Wave is official.">
         <AdminTable
           columns={[
             { key: "university", header: "University" },
@@ -80,7 +101,7 @@ export default function AdminPaymentsPage() {
         />
       </Section>
 
-      <Section title="Reader payables — compensation">
+      <Section title="Reader payables — compensation" description="Patriot is the intended pay initiator. Approval is always Chester’s.">
         <AdminTable
           columns={[
             { key: "reader", header: "Reader" },
@@ -113,7 +134,14 @@ export default function AdminPaymentsPage() {
               approval: item.row.approvedByName
                 ? `${item.row.approvedByName}${item.row.approvedAt ? ` · ${formatShortDate(item.row.approvedAt)}` : ""}`
                 : "Required before payout",
-              status: <StatusBadge kind="pay" value={item.row.status} size="sm" />,
+              status: (
+                <span>
+                  <StatusBadge kind="pay" value={item.row.status} size="sm" />
+                  {item.row.checkNumber ? (
+                    <span className="mt-1 block text-xs text-ink-muted">Check {item.row.checkNumber}</span>
+                  ) : null}
+                </span>
+              ),
               action: <PayActions row={item.row} />,
             },
           }))}
@@ -145,7 +173,14 @@ export default function AdminPaymentsPage() {
               event: item.event?.name ?? "—",
               amount: <span className="tabular-nums">{formatMoney(item.row.amountCents)}</span>,
               approval: item.row.approvedByName ?? "Required before payout",
-              status: <StatusBadge kind="pay" value={item.row.status} size="sm" />,
+              status: (
+                <span>
+                  <StatusBadge kind="pay" value={item.row.status} size="sm" />
+                  {item.row.checkNumber ? (
+                    <span className="mt-1 block text-xs text-ink-muted">Check {item.row.checkNumber}</span>
+                  ) : null}
+                </span>
+              ),
               action: <PayActions row={item.row} />,
             },
           }))}
@@ -153,7 +188,7 @@ export default function AdminPaymentsPage() {
         <p className="text-xs text-ink-muted">
           Compensation is assignment pay. Reimbursement is out-of-pocket expense recovery. They are
           approved separately. Marking paid or cashed is tracking only — Patriot and the bank are not
-          connected.
+          connected. Tracked in VTI — Wave is official for the university side of the books.
         </p>
       </Section>
     </div>
@@ -165,38 +200,90 @@ function PayActions({ row }: { row: ReaderCompensation }) {
   const { notify } = useToast();
   const today = dayKey(new Date().toISOString());
 
+  if (row.status === "void" || row.status === "cashed") {
+    return <span className="text-xs text-ink-faint">No action</span>;
+  }
+
   if (row.status === "promised" || row.status === "pending_approval") {
     return (
-      <Button
-        size="sm"
-        onClick={() => {
-          patchCompensation(row.id, {
-            status: "approved",
-            approvedByName: "Chester Tadeja",
-            approvedAt: new Date().toISOString(),
-          });
-          notify({ title: "Chester approved this payment." });
-        }}
-      >
-        Approve
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          onClick={() => {
+            patchCompensation(row.id, {
+              status: "approved",
+              approvedByName: "Chester Tadeja",
+              approvedAt: new Date().toISOString(),
+            });
+            notify({ title: "Chester approved this payment." });
+          }}
+        >
+          Approve
+        </Button>
+        <VoidButton id={row.id} />
+      </div>
     );
   }
-  if (row.status === "approved" || row.status === "queued") {
+  if (row.status === "approved") {
     return (
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => {
-          patchCompensation(row.id, { status: "paid", paidOn: today });
-          notify({
-            title: "Marked paid (tracking only).",
-            message: "Patriot is not connected. Record the official payout there as usual.",
-          });
-        }}
-      >
-        Mark paid
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            patchCompensation(row.id, { status: "queued" });
+            notify({
+              title: "Queued for payout (tracking only).",
+              message: "Patriot is not connected. Nothing was sent to payroll.",
+            });
+          }}
+        >
+          Queue for payout
+        </Button>
+        <VoidButton id={row.id} />
+      </div>
+    );
+  }
+  if (row.status === "queued") {
+    return (
+      <div className="grid justify-items-end gap-2">
+        <label className="sr-only" htmlFor={`check-${row.id}`}>
+          Check number
+        </label>
+        <input
+          id={`check-${row.id}`}
+          className="w-28 rounded-[var(--radius-md)] border border-line bg-paper-raised px-2 py-1 text-sm"
+          placeholder="Check #"
+          defaultValue={row.checkNumber ?? ""}
+          onBlur={(event) => {
+            const value = event.target.value.trim();
+            if (value !== (row.checkNumber ?? "")) {
+              patchCompensation(row.id, { checkNumber: value || undefined });
+            }
+          }}
+        />
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              const input = document.getElementById(`check-${row.id}`) as HTMLInputElement | null;
+              patchCompensation(row.id, {
+                status: "paid",
+                paidOn: today,
+                checkNumber: input?.value.trim() || row.checkNumber,
+              });
+              notify({
+                title: "Marked paid (tracking only).",
+                message: "Patriot is not connected. Record the official payout there as usual.",
+              });
+            }}
+          >
+            Mark paid
+          </Button>
+          <VoidButton id={row.id} />
+        </div>
+      </div>
     );
   }
   if (row.status === "paid") {
@@ -217,4 +304,24 @@ function PayActions({ row }: { row: ReaderCompensation }) {
     );
   }
   return <span className="text-xs text-ink-faint">No action</span>;
+}
+
+function VoidButton({ id }: { id: string }) {
+  const { patchCompensation } = useOperations();
+  const { notify } = useToast();
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      onClick={() => {
+        patchCompensation(id, { status: "void" });
+        notify({
+          title: "Payment voided (tracking only).",
+          message: "No money was moved. Wave and Patriot are not connected.",
+        });
+      }}
+    >
+      Void
+    </Button>
+  );
 }

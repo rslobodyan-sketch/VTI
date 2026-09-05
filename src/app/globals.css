@@ -104,6 +104,7 @@ body {
 .app-page {
   display: grid;
   gap: 1.5rem;
+  min-width: 0;
 }
 
 .app-kicker {
@@ -195,9 +196,15 @@ tbody tr:hover td {
     padding: 0 !important;
   }
 
-  .call-sheet-doc {
+  .call-sheet-doc,
+  .reader-calendar {
     border: none !important;
     background: white !important;
+    box-shadow: none !important;
+  }
+
+  .reader-calendar {
+    break-inside: avoid;
   }
 }
 

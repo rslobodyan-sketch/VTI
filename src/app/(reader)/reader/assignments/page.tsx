@@ -6,17 +6,17 @@ import { TouchRow } from "@/components/reader/touch-row";
 import { StatusBadge } from "@/components/status/status-badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PageHeader } from "@/components/ui/page-header";
-import { useLiveQueries } from "@/components/operations/operations-store";
-import { formatDate } from "@/lib/format";
+import { useOperations } from "@/components/operations/operations-store";
+import { RecordPending } from "@/components/operations/record-pending";
+import { formatDate, formatMoney } from "@/lib/format";
 
 export default function ReaderAssignmentsPage() {
   const { reader } = useDemoReader();
   const { assignmentStatus } = useDemoSession();
-  const queries = useLiveQueries();
+  const { queries, ready } = useOperations();
+  if (!ready) return <RecordPending />;
   const rows = queries
-    .assignmentsForReader(reader.id)
-    .map(queries.assignmentView)
-    .filter((item): item is NonNullable<typeof item> => Boolean(item))
+    .readerAssignmentViews(reader.id)
     .sort((a, b) =>
       (queries.eventWindow(b.eventId)?.start ?? "").localeCompare(
         queries.eventWindow(a.eventId)?.start ?? "",
@@ -27,7 +27,7 @@ export default function ReaderAssignmentsPage() {
     <div className="grid gap-5">
       <PageHeader
         title="Assignments"
-        description="Jobs assigned to you. Compensation shown is yours only."
+        description="Jobs assigned to you. Pay for this job is on the assignment — not a historical ledger."
       />
       {rows.length ? (
         <div>
@@ -42,7 +42,8 @@ export default function ReaderAssignmentsPage() {
                 meta={
                   <>
                     {item.client.name}
-                    {window ? ` · ${formatDate(window.start)}` : ""} · {item.role}
+                    {window ? ` · ${formatDate(window.start)}` : ""} · {item.role} ·{" "}
+                    {formatMoney(item.promisedPayCents)}
                   </>
                 }
                 trailing={<StatusBadge kind="assignment" value={status} />}

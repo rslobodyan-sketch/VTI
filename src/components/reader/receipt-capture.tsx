@@ -23,6 +23,7 @@ export function ReceiptCapture({
   const [fileName, setFileName] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Ground travel");
+  const [description, setDescription] = useState("");
 
   return (
     <form
@@ -45,15 +46,16 @@ export function ReceiptCapture({
           category,
           amountCents,
           incurredOn: dayKey(new Date().toISOString()),
-          description: fileName,
+          description: description.trim() || fileName,
           receiptLabel: `Receipt · ${fileName}`,
         });
         notify({
           title: "Receipt attached to this report.",
-          message: "The image stays on the device for this walkthrough; the line is stored with the assignment.",
+          message: "The filename is stored. The image is not uploaded in this demo.",
         });
         setFileName("");
         setAmount("");
+        setDescription("");
       }}
     >
       <p className="text-sm font-medium">Add a receipt</p>
@@ -95,6 +97,14 @@ export function ReceiptCapture({
           />
         </Field>
       </div>
+      <Field id={`receipt-desc-${assignmentId}`} label="Description">
+        <Input
+          id={`receipt-desc-${assignmentId}`}
+          value={description}
+          onChange={(event) => setDescription(event.target.value)}
+          placeholder="What this receipt is for"
+        />
+      </Field>
       <Button type="submit" variant="secondary" className="w-full min-h-12">
         Attach receipt to report
       </Button>

@@ -71,6 +71,19 @@ export function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+/** Calendar year/month/day in America/Chicago for an instant (defaults to now). */
+export function currentChicagoDate(now = new Date()): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: CHICAGO_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const value = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  return { year: value("year"), month: value("month"), day: value("day") };
+}
+
 export function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }

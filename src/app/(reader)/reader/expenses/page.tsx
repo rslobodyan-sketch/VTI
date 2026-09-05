@@ -14,16 +14,14 @@ export default function ReaderExpensesPage() {
   const { reader } = useDemoReader();
   const { expenseStatus } = useDemoSession();
   const queries = useLiveQueries();
-  const reports = queries.allExpenseReportViews().filter((item) => item.report.readerId === reader.id);
-  const pay = queries.compensationForReader(reader.id);
+  const reports = queries.readerExpenseReportViews(reader.id);
 
   return (
     <div className="grid gap-6">
       <PageHeader
         title="Expenses"
-        description="Photograph receipts and submit the report for the assignment. Reimbursement still needs Chester’s approval."
+        description="Photograph a receipt (filename only in this demo), enter amount, category, and description, then submit. Chester reviews; reimbursement is approved separately on Payments. Receipt images are not stored."
       />
-
       {reports.length ? (
         reports.map((item) => {
           const status = expenseStatus(item.report.id, item.report.status);
@@ -73,27 +71,6 @@ export default function ReaderExpensesPage() {
       {!reports.length ? (
         <OpenReceiptForNextJob readerId={reader.id} />
       ) : null}
-
-      <section>
-        <h2 className="font-serif text-lg">Your pay</h2>
-        <p className="mt-1 text-xs text-ink-faint">Shown for this reader only.</p>
-        <ul className="mt-2 grid gap-2 text-sm">
-          {pay.map((row) => {
-            const assignment = queries.getAssignment(row.assignmentId);
-            const event = assignment ? queries.getEvent(assignment.eventId) : undefined;
-            return (
-              <li key={row.id} className="flex justify-between gap-3 border-b border-line py-2">
-                <span>
-                  {event?.name} · {row.kind}
-                </span>
-                <span>
-                  {formatMoney(row.amountCents)} <StatusBadge kind="pay" value={row.status} />
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
     </div>
   );
 }
