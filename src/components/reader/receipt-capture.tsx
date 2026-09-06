@@ -24,6 +24,7 @@ export function ReceiptCapture({
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Ground travel");
   const [description, setDescription] = useState("");
+  const [incurredOn, setIncurredOn] = useState(dayKey(new Date().toISOString()));
 
   return (
     <form
@@ -45,7 +46,7 @@ export function ReceiptCapture({
           readerId,
           category,
           amountCents,
-          incurredOn: dayKey(new Date().toISOString()),
+          incurredOn,
           description: description.trim() || fileName,
           receiptLabel: `Receipt · ${fileName}`,
         });
@@ -56,6 +57,7 @@ export function ReceiptCapture({
         setFileName("");
         setAmount("");
         setDescription("");
+        setIncurredOn(dayKey(new Date().toISOString()));
       }}
     >
       <p className="text-sm font-medium">Add a receipt</p>
@@ -72,7 +74,15 @@ export function ReceiptCapture({
           }}
         />
       </Field>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Field id={`receipt-date-${assignmentId}`} label="Date" required>
+          <Input
+            id={`receipt-date-${assignmentId}`}
+            type="date"
+            value={incurredOn}
+            onChange={(event) => setIncurredOn(event.target.value)}
+          />
+        </Field>
         <Field id={`receipt-amount-${assignmentId}`} label="Amount (USD)" required>
           <Input
             id={`receipt-amount-${assignmentId}`}

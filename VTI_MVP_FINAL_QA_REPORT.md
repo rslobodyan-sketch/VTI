@@ -311,3 +311,34 @@ Suggested spoken line:
 ---
 
 Nothing was committed, pushed, or deployed.
+
+---
+
+## 12. End-to-End MVP Operations Pass — September 2026
+
+Implemented after the original finishing freeze, while preserving the documented MVP boundary:
+
+- Added a Financial Command Center with university receivables, reader commitments, approved/queued pay, submitted expenses, net known pipeline, reader comparison, and university performance.
+- Added tracked university-payment recording and invoice status progression without claiming Wave synchronization.
+- Added durable notification preferences for the in-app operational notification categories.
+- Added calendar management for reader availability blocks and admin-only personal/external calendar blocks.
+- Added event-pinned calendar notes from the Event Control Center.
+- Added reader candidate eligibility reasoning using onboarding, NDA, existing assignment, and availability conflict data. Chester still makes the assignment decision.
+- Added Event status actions for confirm, postpone, and cancel with activity logging.
+- Added assignment-notice preview copy reflecting Chester's requested "sound match" selection rationale; no email is transmitted by the MVP.
+- Improved activity logging semantics for travel, availability, personal blocks, calendar notes, invoice updates, university payments, assignment confirmation, and assignment notice preparation.
+- Preserved browser-based MVP persistence. No database, external ledger API, payroll API, bank feed, authentication service, or production storage was introduced.
+
+### Local static validation
+
+- `npx tsc --noEmit` — PASS
+- `npm run lint` — PASS
+
+### Environment limitation
+
+The supplied project dependencies contain the Windows Next.js SWC binary. The current validation environment is Linux and has no network access, so `next dev`, `next build`, and Playwright web-server execution could not be run here because Next.js attempted to download the Linux SWC binary. These commands must be run in the user's Windows/Cursor environment before Git push.
+
+
+## Final Windows release-gate verification — 7 September 2026
+
+`npm run test:release` completed successfully: TypeScript PASS, ESLint PASS, production build PASS, client acceptance 9/9 PASS, responsive smoke 5/5 PASS, and route smoke 3/3 PASS — **17/17 automated checks green**.

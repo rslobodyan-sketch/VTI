@@ -10,8 +10,10 @@ import type {
   Ceremony,
   Client,
   EventRecord,
+  EventReadinessArea,
   ExpenseReport,
   OperationalNote,
+  ReadinessLevel,
   ReaderCompensation,
   ReaderDocument,
   ReaderProfile,
@@ -208,7 +210,18 @@ function readerAssignmentViews(readerId: string) {
     .filter((item): item is AssignmentView => Boolean(item));
 }
 
-/** Current-job pay only. Completed historical compensation stays on Admin. */
+function readerPaymentHistory(readerId: string) {
+  const assignments = new Map(assignmentsForReader(readerId).map((item) => [item.id, item]));
+  return compensationForReader(readerId)
+    .map((row) => {
+      const assignment = assignments.get(row.assignmentId);
+      const event = assignment ? getEvent(assignment.eventId) : undefined;
+      return { row, assignment, event };
+    })
+    .filter((item) => Boolean(item.assignment && item.event));
+}
+
+/** Current-job pay only. Historical pay is exposed through the reader-safe payment history view. */
 function readerCurrentCompensation(readerId: string): ReaderCompensation[] {
   const liveIds = new Set(
     assignmentsForReader(readerId)
@@ -538,6 +551,11 @@ function eventOperationalSummary(eventId: string) {
   );
   const expenseCents = assignments.reduce((sum, item) => sum + assignmentExpenseCents(item.id), 0);
   const quoteCents = event?.quoteAmountCents ?? 0;
+  const payments = invoice
+    ? data.universityPayments.filter((item) => item.invoiceId === invoice.id)
+    : [];
+  const universityPaidCents = payments.reduce((sum, item) => sum + item.amountCents, 0);
+  const outstandingInvoiceCents = Math.max(0, invoicedCents - universityPaidCents);
   return {
     eventId,
     graduates: event?.estimatedGraduateCount ?? 0,
@@ -554,6 +572,374 @@ function eventOperationalSummary(eventId: string) {
     compensationCents,
     expenseCents,
     marginCents: quoteCents - compensationCents - expenseCents,
+    universityPaidCents,
+    outstandingInvoiceCents,
+    payments,
+  };
+}
+
+function flightsForEvent(eventId: string) {
+  return data.flights.filter((item) => item.eventId === eventId);
+}
+
+function hotelStaysForEvent(eventId: string) {
+  return data.hotelStays.filter((item) => item.eventId === eventId);
+}
+
+function groundTransfersForEvent(eventId: string) {
+  return data.groundTransfers.filter((item) => item.eventId === eventId);
+}
+
+function openTasksForEvent(eventId: string) {
+  return data.tasks
+    .filter(
+      (item) =>
+        item.eventId === eventId &&
+        (item.status === "open" || item.status === "in_progress" || item.status === "snoozed"),
+    )
+    .sort((a, b) => (a.dueAt ?? a.createdAt).localeCompare(b.dueAt ?? b.createdAt));
+}
+
+function activityLogForEvent(eventId: string, limit = 12) {
+  return [...data.activityLog]
+    .filter((item) => item.eventId === eventId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+}
+
+function staffingConflictsForEvent(eventId: string) {
+  const window = eventWindow(eventId);
+  if (!window) return [] as Array<{ readerId: string; readerName: string; detail: string }>;
+  const active = assignmentsForEvent(eventId).filter((item) =>
+    ["offered", "accepted", "assigned"].includes(item.status),
+  );
+  const conflicts: Array<{ readerId: string; readerName: string; detail: string }> = [];
+  for (const assignment of active) {
+    const reader = getReader(assignment.readerId);
+    if (!reader) continue;
+    const blocks = data.availability.filter(
+      (item) =>
+        item.readerId === assignment.readerId &&
+        item.kind === "unavailable" &&
+        item.startsAt <= window.end &&
+        item.endsAt >= window.start,
+    );
+    for (const block of blocks) {
+      conflicts.push({
+        readerId: reader.id,
+        readerName: reader.contractorName,
+        detail: block.notes || `Unavailable ${dayKey(block.startsAt)}–${dayKey(block.endsAt)}`,
+      });
+    }
+  }
+  return conflicts;
+}
+
+function worstReadiness(levels: ReadinessLevel[]): ReadinessLevel {
+  if (levels.includes("missing")) return "missing";
+  if (levels.includes("attention")) return "attention";
+  return "ready";
+}
+
+function eventReadiness(eventId: string) {
+  const event = getEvent(eventId);
+  const active = assignmentsForEvent(eventId).filter((item) =>
+    ["offered", "accepted", "assigned"].includes(item.status),
+  );
+  const lead = leadForEvent(eventId);
+  const offered = active.filter((item) => item.status === "offered");
+  const conflicts = staffingConflictsForEvent(eventId);
+  const flights = flightsForEvent(eventId);
+  const hotels = hotelStaysForEvent(eventId);
+  const transfers = groundTransfersForEvent(eventId);
+  const callSheet = currentCallSheet(eventId);
+  const docs = documentsForEvent(eventId);
+  const nameListPending = docs.some(
+    (item) =>
+      item.kind === "name_list" && item.statusNote.toLowerCase().includes("not yet"),
+  );
+  const openTasks = openTasksForEvent(eventId);
+  const ops = eventOperationalSummary(eventId);
+  const invoice = invoicesForEvent(eventId)[0];
+  const pendingPay = active.flatMap((item) =>
+    compensationForAssignment(item.id).filter(
+      (row) => row.status === "pending_approval" || row.status === "promised",
+    ),
+  );
+  const submittedExpenses = active.flatMap((item) =>
+    expensesForAssignment(item.id).filter((row) => row.status === "submitted"),
+  );
+
+  let staffing: EventReadinessArea;
+  if (active.length === 0) {
+    staffing = {
+      key: "staffing",
+      label: "Staffing",
+      level: "missing",
+      summary: "No reader currently assigned",
+    };
+  } else if (offered.length || !lead || conflicts.length) {
+    const parts: string[] = [];
+    if (offered.length) parts.push(`${offered.length} offer awaiting response`);
+    if (!lead) parts.push("Lead reader not set");
+    if (conflicts.length) parts.push(`${conflicts.length} availability conflict`);
+    staffing = {
+      key: "staffing",
+      label: "Staffing",
+      level: "attention",
+      summary: parts.join(" · "),
+    };
+  } else {
+    staffing = {
+      key: "staffing",
+      label: "Staffing",
+      level: "ready",
+      summary: `${active.length} assigned · lead ${lead.contractorName}`,
+    };
+  }
+
+  const travelRows = [...flights, ...hotels, ...transfers];
+  const missingTravel = travelRows.filter((item) => item.status === "missing");
+  const pendingTravel = travelRows.filter((item) => item.status === "pending");
+  const needsTravel =
+    Boolean(event?.airfareNotes && !/^none\.?$/i.test(event.airfareNotes.trim())) ||
+    Boolean(event?.accommodationNotes && !/^none\.?$/i.test(event.accommodationNotes.trim())) ||
+    flights.length + hotels.length > 0;
+  let travel: EventReadinessArea;
+  if (needsTravel && travelRows.length === 0) {
+    travel = {
+      key: "travel",
+      label: "Travel",
+      level: "missing",
+      summary: "Structured travel not recorded yet",
+    };
+  } else if (missingTravel.length) {
+    travel = {
+      key: "travel",
+      label: "Travel",
+      level: "missing",
+      summary: `${missingTravel.length} confirmation missing`,
+    };
+  } else if (pendingTravel.length) {
+    travel = {
+      key: "travel",
+      label: "Travel",
+      level: "attention",
+      summary: `${pendingTravel.length} confirmation pending`,
+    };
+  } else if (!needsTravel) {
+    travel = {
+      key: "travel",
+      label: "Travel",
+      level: "ready",
+      summary: "Local / not required",
+    };
+  } else {
+    travel = {
+      key: "travel",
+      label: "Travel",
+      level: "ready",
+      summary: "Flights, lodging, and transfers confirmed",
+    };
+  }
+
+  let callSheetArea: EventReadinessArea;
+  if (!callSheet) {
+    callSheetArea = {
+      key: "call_sheet",
+      label: "Call Sheet",
+      level: "missing",
+      summary: "No Call Sheet issued",
+    };
+  } else {
+    const unsigned = active.filter((item) => !acknowledgementFor(callSheet.id, item.readerId));
+    if (unsigned.length) {
+      callSheetArea = {
+        key: "call_sheet",
+        label: "Call Sheet",
+        level: "attention",
+        summary: `v${callSheet.version} issued · ${unsigned.length} acknowledgement outstanding`,
+      };
+    } else {
+      callSheetArea = {
+        key: "call_sheet",
+        label: "Call Sheet",
+        level: "ready",
+        summary: `v${callSheet.version} issued · all acknowledgements in`,
+      };
+    }
+  }
+
+  let documents: EventReadinessArea;
+  if (nameListPending) {
+    documents = {
+      key: "documents",
+      label: "Documents",
+      level: "missing",
+      summary: "Name list not yet received",
+    };
+  } else if (docs.length === 0) {
+    documents = {
+      key: "documents",
+      label: "Documents",
+      level: "attention",
+      summary: "No event documents recorded",
+    };
+  } else {
+    documents = {
+      key: "documents",
+      label: "Documents",
+      level: "ready",
+      summary: `${docs.length} document${docs.length === 1 ? "" : "s"} on file`,
+    };
+  }
+
+  let financial: EventReadinessArea;
+  if (!event?.quoteAmountCents) {
+    financial = {
+      key: "financial",
+      label: "Financial",
+      level: "missing",
+      summary: "No quote recorded",
+    };
+  } else if (submittedExpenses.length || ops.outstandingInvoiceCents > 0 || invoice?.status === "draft") {
+    const parts: string[] = [];
+    if (submittedExpenses.length) parts.push(`${submittedExpenses.length} expense under review`);
+    if (invoice?.status === "draft") parts.push("Invoice still draft");
+    if (ops.outstandingInvoiceCents > 0) parts.push("University balance outstanding");
+    if (pendingPay.some((item) => item.status === "pending_approval")) {
+      parts.push("Pay lines awaiting approval");
+    }
+    financial = {
+      key: "financial",
+      label: "Financial",
+      level: "attention",
+      summary: parts.join(" · ") || "Money needs attention",
+    };
+  } else {
+    financial = {
+      key: "financial",
+      label: "Financial",
+      level: "ready",
+      summary: `Quote ${ops.quoteCents ? "on file" : "—"} · margin tracked`,
+    };
+  }
+
+  const tasksArea: EventReadinessArea =
+    openTasks.length === 0
+      ? {
+          key: "tasks",
+          label: "Tasks",
+          level: "ready",
+          summary: "No open event tasks",
+        }
+      : {
+          key: "tasks",
+          label: "Tasks",
+          level: "attention",
+          summary: `${openTasks.length} open task${openTasks.length === 1 ? "" : "s"}`,
+        };
+
+  const areas = [staffing, travel, callSheetArea, documents, financial, tasksArea];
+  const overall = worstReadiness(areas.map((item) => item.level));
+  const nextActions = areas
+    .filter((item) => item.level !== "ready")
+    .map((item) => `${item.label}: ${item.summary}`);
+
+  return { areas, overall, nextActions, conflicts };
+}
+
+
+function readerCandidatesForEvent(eventId: string) {
+  const window = eventWindow(eventId);
+  const activeReaderIds = new Set(
+    assignmentsForEvent(eventId)
+      .filter((item) => ["offered", "accepted", "assigned"].includes(item.status))
+      .map((item) => item.readerId),
+  );
+  return data.readers.map((reader) => {
+    const conflict = window
+      ? data.availability.find(
+          (item) =>
+            item.readerId === reader.id &&
+            item.kind === "unavailable" &&
+            item.startsAt <= window.end &&
+            item.endsAt >= window.start,
+        )
+      : undefined;
+    const alreadyAssigned = activeReaderIds.has(reader.id);
+    return {
+      reader,
+      alreadyAssigned,
+      conflict,
+      eligible: !alreadyAssigned && !conflict && reader.onboardingStatus === "ready" && reader.ndaSigned,
+      reason: alreadyAssigned
+        ? "Already on this event"
+        : conflict
+          ? conflict.notes || "Unavailable during event"
+          : reader.onboardingStatus !== "ready"
+            ? "Onboarding not ready"
+            : !reader.ndaSigned
+              ? "NDA missing"
+              : "Available",
+    };
+  });
+}
+
+function financialCommandCenter() {
+  const invoices = data.invoices.map((invoice) => {
+    const client = getClient(invoice.clientId);
+    const event = invoice.eventId ? getEvent(invoice.eventId) : undefined;
+    const received = data.universityPayments.filter((item) => item.invoiceId === invoice.id);
+    const receivedCents = received.reduce((sum, item) => sum + item.amountCents, 0);
+    return { invoice, client, event, received, receivedCents, outstandingCents: Math.max(0, invoice.amountCents - receivedCents) };
+  });
+  const compensation = allCompensationViews();
+  const openReaderPay = compensation.filter((item) => !["paid", "cashed", "void"].includes(item.row.status));
+  const readerPayCommittedCents = openReaderPay.reduce((sum, item) => sum + item.row.amountCents, 0);
+  const approvedOrQueuedCents = openReaderPay
+    .filter((item) => ["approved", "queued"].includes(item.row.status))
+    .reduce((sum, item) => sum + item.row.amountCents, 0);
+  const submittedExpenseCents = allExpenseReportViews()
+    .filter((item) => item.report.status === "submitted" || item.report.status === "approved")
+    .reduce((sum, item) => sum + item.totalCents, 0);
+  const outstandingReceivablesCents = invoices.reduce((sum, item) => sum + item.outstandingCents, 0);
+  const billedCents = invoices.reduce((sum, item) => sum + item.invoice.amountCents, 0);
+  const receivedCents = invoices.reduce((sum, item) => sum + item.receivedCents, 0);
+  const universityRows = data.clients.map((client) => {
+    const rows = invoices.filter((item) => item.invoice.clientId === client.id);
+    const events = eventsForClient(client.id);
+    const totals = universityOperationalSummary(client.id);
+    return {
+      client,
+      events: events.length,
+      billedCents: rows.reduce((sum, item) => sum + item.invoice.amountCents, 0),
+      receivedCents: rows.reduce((sum, item) => sum + item.receivedCents, 0),
+      outstandingCents: rows.reduce((sum, item) => sum + item.outstandingCents, 0),
+      quoteCents: totals.quoteCents,
+      compensationCents: totals.compensationCents,
+      expenseCents: totals.expenseCents,
+      marginCents: totals.marginCents,
+    };
+  }).filter((row) => row.events || row.billedCents);
+  const readerRows = data.readers.map((reader) => ({
+    reader,
+    ...readerAdminFinancialSummary(reader.id),
+    expenseCents: readerExpenseReportViews(reader.id).reduce((sum, item) => sum + item.totalCents, 0),
+    totalPaidCents: compensationForReader(reader.id).filter((item) => item.status === "paid" || item.status === "cashed").reduce((sum, item) => sum + item.amountCents, 0),
+  }));
+  return {
+    invoices,
+    compensation,
+    universityRows,
+    readerRows,
+    billedCents,
+    receivedCents,
+    outstandingReceivablesCents,
+    readerPayCommittedCents,
+    approvedOrQueuedCents,
+    submittedExpenseCents,
+    netKnownPipelineCents: outstandingReceivablesCents - readerPayCommittedCents - submittedExpenseCents,
   };
 }
 
@@ -647,6 +1033,7 @@ function readerAdminFinancialSummary(readerId: string) {
     readerAssignmentView,
     readerAssignmentViews,
     readerCurrentCompensation,
+    readerPaymentHistory,
     readerCalendarDayEvents,
     eventsForClient,
     inquiriesForClient,
@@ -668,6 +1055,25 @@ function readerAdminFinancialSummary(readerId: string) {
     eventOperationalSummary,
     universityOperationalSummary,
     readerAdminFinancialSummary,
+    flightsForEvent,
+    hotelStaysForEvent,
+    groundTransfersForEvent,
+    openTasksForEvent,
+    activityLogForEvent,
+    staffingConflictsForEvent,
+    eventReadiness,
+    readerCandidatesForEvent,
+    financialCommandCenter,
+    openTasks: () =>
+      data.tasks
+        .filter((item) => item.status === "open" || item.status === "in_progress" || item.status === "snoozed")
+        .sort((a, b) => (a.dueAt ?? a.createdAt).localeCompare(b.dueAt ?? b.createdAt)),
+    unreadNotifications: () =>
+      data.notifications
+        .filter((item) => !item.readAt)
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    recentActivityLog: (limit = 12) =>
+      [...data.activityLog].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, limit),
   };
 }
 
@@ -725,4 +1131,11 @@ export const monthIsoBounds = seed.monthIsoBounds;
 export const eventOperationalSummary = seed.eventOperationalSummary;
 export const universityOperationalSummary = seed.universityOperationalSummary;
 export const readerAdminFinancialSummary = seed.readerAdminFinancialSummary;
+export const flightsForEvent = seed.flightsForEvent;
+export const hotelStaysForEvent = seed.hotelStaysForEvent;
+export const groundTransfersForEvent = seed.groundTransfersForEvent;
+export const openTasksForEvent = seed.openTasksForEvent;
+export const activityLogForEvent = seed.activityLogForEvent;
+export const staffingConflictsForEvent = seed.staffingConflictsForEvent;
+export const eventReadiness = seed.eventReadiness;
 export { catalog, DEMO_CATALOG_REVISION };

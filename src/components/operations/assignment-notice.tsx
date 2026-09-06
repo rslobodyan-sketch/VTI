@@ -69,7 +69,15 @@ export function AssignmentNoticePanel({ view }: { view: AssignmentView }) {
         </div>
       </dl>
       {notice ? (
-        <p className="text-sm text-success">Assignment notification prepared.</p>
+        <div className="grid gap-2 border-t border-line pt-3 text-sm">
+          <p className="font-medium text-success">Assignment notification prepared — ready for Chester&apos;s usual email send.</p>
+          <div className="rounded-[var(--radius-md)] bg-paper-inset p-3">
+            <p><span className="text-ink-muted">To:</span> {view.reader.email}</p>
+            <p><span className="text-ink-muted">Subject:</span> VTI selected you for {view.client.name}</p>
+            <p className="mt-2 leading-relaxed">Hi {view.reader.contractorName.split(" ")[0]}, you have been selected for {view.client.name} because your sound is a strong match for this event. The assignment details and Call Sheet are ready in VTI.</p>
+            <p className="mt-2 text-ink-muted">Attach the current Call Sheet when sending. No email is transmitted by this MVP.</p>
+          </div>
+        </div>
       ) : (
         <Button
           onClick={() => {

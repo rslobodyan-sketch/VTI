@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test:e2e": "playwright test",
-    "test:e2e:headed": "playwright test --headed"
+    "test:e2e:headed": "playwright test --headed",
+    "test:acceptance": "playwright test tests/e2e/client-acceptance.spec.ts --workers=1",
+    "test:release": "npx tsc --noEmit && npm run lint && npm run build && npm run test:acceptance && npx playwright test tests/e2e/routes.spec.ts tests/e2e/responsive.spec.ts --workers=1"
   },
   "dependencies": {
     "next": "15.5.24",

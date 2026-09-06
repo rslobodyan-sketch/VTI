@@ -13,7 +13,17 @@ import { flushSync } from "react-dom";
 import { catalog as seedCatalog } from "@/data/catalog";
 import { seedActivity, seedUniversityProfiles } from "@/data/university-profiles";
 import { createQueries } from "@/data/queries";
+import {
+  clearPersistedRaw,
+  loadPersistedRaw,
+  OPERATIONS_OVERLAY_KEY,
+  savePersistedRaw,
+} from "@/lib/operations-persistence";
 import type {
+  ActivityLogAction,
+  ActivityLogEntry,
+  AppNotification,
+  AppNotificationType,
   Assignment,
   AssignmentStatus,
   CallSheet,
@@ -23,6 +33,10 @@ import type {
   Client,
   ClientContact,
   EventRecord,
+  Flight,
+  HotelStay,
+  GroundTransfer,
+  EventDocument,
   ExpenseLine,
   ExpenseReport,
   ExpenseStatus,
@@ -32,8 +46,18 @@ import type {
   Debrief,
   OperationalNote,
   ReaderCompensation,
+  Task,
+  TaskStatus,
   WorkspaceDocument,
   WorkspaceDocumentCategory,
+  AvailabilityBlock,
+  PersonalTimeBlock,
+  CalendarNote,
+  Invoice,
+  Estimate,
+  UniversityPayment,
+  NotificationPreferenceKey,
+  NotificationPreferences,
 } from "@/types/domain";
 import type {
   ActivityItem,
@@ -42,7 +66,6 @@ import type {
 } from "@/types/operations";
 import { INQUIRY_STAGE_ORDER } from "@/types/operations";
 
-const STORAGE_KEY = "vti-operations-overlay";
 const COLORS = ["#4a5560", "#6b2d3c", "#1f4e79", "#3d5a3a", "#5c4a2e", "#3b4a6b", "#5a3d4e"];
 
 type Overlay = {
@@ -69,6 +92,23 @@ type Overlay = {
   assignmentNotices: Record<string, { preparedAt: string; status: "prepared" }>;
   notes: OperationalNote[];
   workspaceDocuments: WorkspaceDocument[];
+  tasks: Task[];
+  notifications: AppNotification[];
+  activityLog: ActivityLogEntry[];
+  flights: Flight[];
+  hotelStays: HotelStay[];
+  groundTransfers: GroundTransfer[];
+  eventDocuments: EventDocument[];
+  availability: AvailabilityBlock[];
+  personalBlocks: PersonalTimeBlock[];
+  calendarNotes: CalendarNote[];
+  invoices: Invoice[];
+  estimates: Estimate[];
+  universityPayments: UniversityPayment[];
+  notificationPreferences: NotificationPreferences;
+  removedAvailabilityIds: string[];
+  removedPersonalBlockIds: string[];
+  removedCalendarNoteIds: string[];
 };
 
 function blankOverlay(): Overlay {
@@ -96,6 +136,30 @@ function blankOverlay(): Overlay {
     assignmentNotices: {},
     notes: [],
     workspaceDocuments: [],
+    tasks: [],
+    notifications: [],
+    activityLog: [],
+    flights: [],
+    hotelStays: [],
+    groundTransfers: [],
+    eventDocuments: [],
+    availability: [],
+    personalBlocks: [],
+    calendarNotes: [],
+    invoices: [],
+    estimates: [],
+    universityPayments: [],
+    notificationPreferences: {
+      call_sheet_ack: true,
+      assignment_offers: true,
+      expenses: true,
+      insurance: true,
+      payments: true,
+      tasks: true,
+    },
+    removedAvailabilityIds: [],
+    removedPersonalBlockIds: [],
+    removedCalendarNoteIds: [],
   };
 }
 
@@ -172,36 +236,85 @@ function mergeCatalog(overlay: Overlay): Catalog {
     compensation,
     debriefs: upsert(seedCatalog.debriefs, asArray(overlay.debriefs)),
     notes: upsert(seedCatalog.notes, asArray(overlay.notes)),
+    tasks: upsert(seedCatalog.tasks, asArray(overlay.tasks)),
+    notifications: upsert(seedCatalog.notifications, asArray(overlay.notifications)),
+    activityLog: upsert(seedCatalog.activityLog, asArray(overlay.activityLog)),
+    flights: upsert(seedCatalog.flights, asArray(overlay.flights)),
+    hotelStays: upsert(seedCatalog.hotelStays, asArray(overlay.hotelStays)),
+    groundTransfers: upsert(seedCatalog.groundTransfers, asArray(overlay.groundTransfers)),
+    eventDocuments: upsert(seedCatalog.eventDocuments, asArray(overlay.eventDocuments)),
+    availability: upsert(seedCatalog.availability.filter((item) => !overlay.removedAvailabilityIds.includes(item.id)), asArray(overlay.availability)),
+    personalBlocks: upsert(seedCatalog.personalBlocks.filter((item) => !overlay.removedPersonalBlockIds.includes(item.id)), asArray(overlay.personalBlocks)),
+    calendarNotes: upsert(seedCatalog.calendarNotes.filter((item) => !overlay.removedCalendarNoteIds.includes(item.id)), asArray(overlay.calendarNotes)),
+    invoices: upsert(seedCatalog.invoices, asArray(overlay.invoices)),
+    estimates: upsert(seedCatalog.estimates, asArray(overlay.estimates)),
+    universityPayments: upsert(seedCatalog.universityPayments, asArray(overlay.universityPayments)),
   };
 }
 
-function readStoredOverlayRaw(): string | null {
-  if (typeof window === "undefined") return null;
-  try {
-    return window.localStorage.getItem(STORAGE_KEY) ?? window.sessionStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null;
-  }
+function writeOverlay(next: Overlay) {
+  savePersistedRaw(JSON.stringify(next));
 }
 
-function writeOverlay(next: Overlay) {
-  const raw = JSON.stringify(next);
-  try {
-    window.localStorage.setItem(STORAGE_KEY, raw);
-  } catch {
-    /* quota */
-  }
-  try {
-    window.sessionStorage.setItem(STORAGE_KEY, raw);
-  } catch {
-    /* quota / private mode */
-  }
+function notificationPreferenceKey(type: AppNotificationType): NotificationPreferenceKey | undefined {
+  if (type === "call_sheet") return "call_sheet_ack";
+  if (type === "assignment") return "assignment_offers";
+  if (type === "expense") return "expenses";
+  if (type === "payment") return "payments";
+  if (type === "task") return "tasks";
+  return undefined;
+}
+
+function appendTrail(
+  prev: Overlay,
+  entry: {
+    action: ActivityLogAction;
+    title: string;
+    detail?: string;
+    actorName?: string;
+    eventId?: string;
+    clientId?: string;
+    assignmentId?: string;
+    href?: string;
+  },
+  notification?: Omit<AppNotification, "id" | "createdAt">,
+): Pick<Overlay, "activityLog" | "notifications"> {
+  const createdAt = new Date().toISOString();
+  const preferenceKey = notification ? notificationPreferenceKey(notification.type) : undefined;
+  const notificationEnabled = !preferenceKey || prev.notificationPreferences[preferenceKey];
+  return {
+    activityLog: [
+      ...prev.activityLog,
+      {
+        id: uid("alog"),
+        action: entry.action,
+        title: entry.title,
+        detail: entry.detail,
+        actorName: entry.actorName ?? "Chester Tadeja",
+        createdAt,
+        eventId: entry.eventId,
+        clientId: entry.clientId,
+        assignmentId: entry.assignmentId,
+        href: entry.href,
+      },
+    ],
+    notifications: notification && notificationEnabled
+      ? [
+          ...prev.notifications,
+          {
+            id: uid("ntf"),
+            createdAt,
+            ...notification,
+          },
+        ]
+      : prev.notifications,
+  };
 }
 
 function loadOverlay(): Overlay {
   if (typeof window === "undefined") return blankOverlay();
   try {
-    const raw = readStoredOverlayRaw();
+    const raw = loadPersistedRaw();
     if (!raw) return blankOverlay();
     const parsed = JSON.parse(raw) as Partial<Overlay>;
     const next: Overlay = {
@@ -230,6 +343,23 @@ function loadOverlay(): Overlay {
       assignmentNotices: parsed.assignmentNotices ?? {},
       notes: asArray(parsed.notes),
       workspaceDocuments: asArray(parsed.workspaceDocuments),
+      tasks: asArray(parsed.tasks),
+      notifications: asArray(parsed.notifications),
+      activityLog: asArray(parsed.activityLog),
+      flights: asArray(parsed.flights),
+      hotelStays: asArray(parsed.hotelStays),
+      groundTransfers: asArray(parsed.groundTransfers),
+      eventDocuments: asArray(parsed.eventDocuments),
+      availability: asArray(parsed.availability),
+      personalBlocks: asArray(parsed.personalBlocks),
+      calendarNotes: asArray(parsed.calendarNotes),
+      invoices: asArray(parsed.invoices),
+      estimates: asArray(parsed.estimates),
+      universityPayments: asArray(parsed.universityPayments),
+      notificationPreferences: { ...blankOverlay().notificationPreferences, ...(parsed.notificationPreferences ?? {}) },
+      removedAvailabilityIds: asArray(parsed.removedAvailabilityIds),
+      removedPersonalBlockIds: asArray(parsed.removedPersonalBlockIds),
+      removedCalendarNoteIds: asArray(parsed.removedCalendarNoteIds),
     };
     writeOverlay(next);
     return next;
@@ -310,6 +440,27 @@ type OperationsContextValue = {
   }) => string;
   workspaceDocuments: WorkspaceDocument[];
   submitDebrief: (input: Omit<Debrief, "id" | "submittedAt">) => string;
+  setTaskStatus: (id: string, status: TaskStatus) => void;
+  createTask: (input: Omit<Task, "id" | "createdAt" | "completedAt">) => string;
+  createInvoice: (input: Omit<Invoice, "id">) => string;
+  addFlight: (input: Omit<Flight, "id">) => string;
+  addHotelStay: (input: Omit<HotelStay, "id">) => string;
+  addGroundTransfer: (input: Omit<GroundTransfer, "id">) => string;
+  addEventDocument: (input: Omit<EventDocument, "id" | "uploadedAt">) => string;
+  patchFlight: (id: string, patch: Partial<Flight>) => void;
+  patchHotelStay: (id: string, patch: Partial<HotelStay>) => void;
+  patchGroundTransfer: (id: string, patch: Partial<GroundTransfer>) => void;
+  addAvailabilityBlock: (input: Omit<AvailabilityBlock, "id">) => string;
+  removeAvailabilityBlock: (id: string) => void;
+  addPersonalTimeBlock: (input: Omit<PersonalTimeBlock, "id">) => string;
+  removePersonalTimeBlock: (id: string) => void;
+  addCalendarNote: (input: Omit<CalendarNote, "id">) => string;
+  patchInvoice: (id: string, patch: Partial<Invoice>) => void;
+  recordUniversityPayment: (input: Omit<UniversityPayment, "id">) => string;
+  notificationPreferences: NotificationPreferences;
+  setNotificationPreference: (key: NotificationPreferenceKey, enabled: boolean) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
   reset: () => void;
   hasOverrides: boolean;
   ready: boolean;
@@ -325,7 +476,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     setOverlay(loadOverlay());
     setReady(true);
     const onStorage = (event: StorageEvent) => {
-      if (event.key === STORAGE_KEY || event.key === null) {
+      if (event.key === OPERATIONS_OVERLAY_KEY || event.key === null) {
         setOverlay(loadOverlay());
       }
     };
@@ -763,11 +914,26 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
             ]);
           }
         }
+        const existingEstimate = seedCatalog.estimates.find((item) => item.eventId === id);
+        const estimates = existingEstimate
+          ? prev.estimates
+          : [
+              ...prev.estimates,
+              {
+                id: uid("est"),
+                clientId: input.clientId,
+                eventId: id,
+                amountCents: input.quoteAmountCents,
+                status: "draft",
+                notes: "Tracking copy. Official estimate lives in Wave.",
+              } satisfies Estimate,
+            ];
         return {
           ...prev,
           inquiries,
           events: [...prev.events, event],
           ceremonies: [...prev.ceremonies, ceremony],
+          estimates,
           activity: [
             ...prev.activity,
             {
@@ -790,67 +956,148 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     (eventId: string, readerId: string, role: Assignment["role"], promisedPayCents: number) => {
       const id = uid("asg");
       const event = catalog.events.find((item) => item.id === eventId);
-      persist((prev) => ({
-        ...prev,
-        assignments: [
-          ...prev.assignments,
-          { id, eventId, readerId, role, status: "offered", promisedPayCents },
-        ],
-        compensation: [
-          ...prev.compensation,
+      const reader = catalog.readers.find((item) => item.id === readerId);
+      persist((prev) => {
+        const trail = appendTrail(
+          prev,
           {
-            id: uid("pay"),
+            action: "assignment_offered",
+            title: "Assignment offered",
+            detail: reader?.contractorName,
+            eventId,
+            clientId: event?.clientId,
             assignmentId: id,
-            readerId,
-            kind: "compensation",
-            amountCents: promisedPayCents,
-            status: "promised",
+            href: `/admin/assignments/${id}`,
           },
-        ],
-        activity: event
-          ? [
-              ...prev.activity,
-              {
-                id: uid("act"),
-                clientId: event.clientId,
-                at: new Date().toISOString(),
-                title: "Reader offered",
-                href: `/admin/assignments/${id}`,
-              },
-            ]
-          : prev.activity,
-      }));
+          {
+            type: "assignment",
+            title: "Assignment offer outstanding",
+            message: `${reader?.contractorName ?? "A reader"} was offered an assignment.`,
+            severity: "info",
+            href: `/admin/assignments/${id}`,
+            relatedEntityType: "assignment",
+            relatedEntityId: id,
+          },
+        );
+        return {
+          ...prev,
+          assignments: [
+            ...prev.assignments,
+            { id, eventId, readerId, role, status: "offered", promisedPayCents },
+          ],
+          compensation: [
+            ...prev.compensation,
+            {
+              id: uid("pay"),
+              assignmentId: id,
+              readerId,
+              kind: "compensation",
+              amountCents: promisedPayCents,
+              status: "promised",
+            },
+          ],
+          activity: event
+            ? [
+                ...prev.activity,
+                {
+                  id: uid("act"),
+                  clientId: event.clientId,
+                  at: new Date().toISOString(),
+                  title: "Reader offered",
+                  href: `/admin/assignments/${id}`,
+                },
+              ]
+            : prev.activity,
+          ...trail,
+        };
+      });
       return id;
     },
-    [catalog.events, persist],
+    [catalog.events, catalog.readers, persist],
   );
 
   const acceptAssignment = useCallback(
     (id: string) => {
-      persist((prev) => ({
-        ...prev,
-        assignmentStatus: { ...prev.assignmentStatus, [id]: "accepted" },
-      }));
+      persist((prev) => {
+        const assignment =
+          prev.assignments.find((item) => item.id === id) ??
+          seedCatalog.assignments.find((item) => item.id === id);
+        const event = assignment
+          ? seedCatalog.events.find((item) => item.id === assignment.eventId) ||
+            prev.events.find((item) => item.id === assignment.eventId)
+          : undefined;
+        const reader = assignment
+          ? seedCatalog.readers.find((item) => item.id === assignment.readerId)
+          : undefined;
+        const trail = appendTrail(
+          prev,
+          {
+            action: "assignment_accepted",
+            title: "Assignment accepted",
+            detail: reader?.contractorName,
+            actorName: reader?.contractorName ?? "Reader",
+            eventId: assignment?.eventId,
+            clientId: event?.clientId,
+            assignmentId: id,
+            href: `/admin/assignments/${id}`,
+          },
+          {
+            type: "assignment",
+            title: "Assignment accepted",
+            message: `${reader?.contractorName ?? "A reader"} accepted an assignment.`,
+            severity: "info",
+            href: `/admin/assignments/${id}`,
+            relatedEntityType: "assignment",
+            relatedEntityId: id,
+          },
+        );
+        return {
+          ...prev,
+          assignmentStatus: { ...prev.assignmentStatus, [id]: "accepted" },
+          ...trail,
+        };
+      });
     },
     [persist],
   );
 
   const acknowledge = useCallback(
     (callSheetId: string, readerId: string, assignmentId: string) => {
-      persist((prev) => ({
-        ...prev,
-        acknowledgements: [
-          ...prev.acknowledgements,
-          {
-            id: uid("ack"),
-            callSheetId,
-            readerId,
-            assignmentId,
-            acceptedAt: new Date().toISOString(),
-            method: "click_accept",
-          },
-        ],
-      }));
+      persist((prev) => {
+        const reader = seedCatalog.readers.find((item) => item.id === readerId);
+        const assignment =
+          prev.assignments.find((item) => item.id === assignmentId) ??
+          seedCatalog.assignments.find((item) => item.id === assignmentId);
+        const event = assignment
+          ? seedCatalog.events.find((item) => item.id === assignment.eventId) ||
+            prev.events.find((item) => item.id === assignment.eventId)
+          : undefined;
+        const trail = appendTrail(prev, {
+          action: "call_sheet_acknowledged",
+          title: "Call Sheet acknowledged",
+          detail: reader?.contractorName,
+          actorName: reader?.contractorName ?? "Reader",
+          eventId: assignment?.eventId,
+          clientId: event?.clientId,
+          assignmentId,
+          href: assignmentId ? `/admin/assignments/${assignmentId}` : undefined,
+        });
+        return {
+          ...prev,
+          acknowledgements: [
+            ...prev.acknowledgements,
+            {
+              id: uid("ack"),
+              callSheetId,
+              readerId,
+              assignmentId,
+              acceptedAt: new Date().toISOString(),
+              method: "click_accept",
+            },
+          ],
+          ...trail,
+        };
+      });
     },
     [persist],
   );
@@ -880,6 +1127,39 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
         const existing =
           prev.expenseReports.find((item) => item.id === id) ??
           seedCatalog.expenseReports.find((item) => item.id === id);
+        const assignment =
+          existing &&
+          (prev.assignments.find((item) => item.id === existing.assignmentId) ??
+            seedCatalog.assignments.find((item) => item.id === existing.assignmentId));
+        const event = assignment
+          ? seedCatalog.events.find((item) => item.id === assignment.eventId) ||
+            prev.events.find((item) => item.id === assignment.eventId)
+          : undefined;
+        const reader = existing
+          ? seedCatalog.readers.find((item) => item.id === existing.readerId)
+          : undefined;
+        const trail = appendTrail(
+          prev,
+          {
+            action: "expense_submitted",
+            title: "Expense submitted",
+            detail: reader?.contractorName,
+            actorName: reader?.contractorName ?? "Reader",
+            eventId: assignment?.eventId,
+            clientId: event?.clientId,
+            assignmentId: existing?.assignmentId,
+            href: `/admin/expenses/${id}`,
+          },
+          {
+            type: "expense",
+            title: "Expense awaiting review",
+            message: `${reader?.contractorName ?? "A reader"} submitted an expense report.`,
+            severity: "warning",
+            href: `/admin/expenses/${id}`,
+            relatedEntityType: "expense_report",
+            relatedEntityId: id,
+          },
+        );
         return {
           ...prev,
           expenseStatus: { ...prev.expenseStatus, [id]: "submitted" },
@@ -892,6 +1172,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
                 },
               ])
             : prev.expenseReports,
+          ...trail,
         };
       });
     },
@@ -904,6 +1185,22 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
         const existing =
           prev.expenseReports.find((item) => item.id === id) ??
           seedCatalog.expenseReports.find((item) => item.id === id);
+        const assignment =
+          existing &&
+          (prev.assignments.find((item) => item.id === existing.assignmentId) ??
+            seedCatalog.assignments.find((item) => item.id === existing.assignmentId));
+        const event = assignment
+          ? seedCatalog.events.find((item) => item.id === assignment.eventId) ||
+            prev.events.find((item) => item.id === assignment.eventId)
+          : undefined;
+        const trail = appendTrail(prev, {
+          action: status === "approved" ? "expense_approved" : "expense_rejected",
+          title: status === "approved" ? "Expense approved" : "Expense rejected",
+          eventId: assignment?.eventId,
+          clientId: event?.clientId,
+          assignmentId: existing?.assignmentId,
+          href: `/admin/expenses/${id}`,
+        });
         return {
           ...prev,
           expenseStatus: { ...prev.expenseStatus, [id]: status },
@@ -917,6 +1214,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
                 },
               ])
             : prev.expenseReports,
+          ...trail,
         };
       });
     },
@@ -939,13 +1237,21 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
         const reports = upsert(seedCatalog.expenseReports, prev.expenseReports);
         let reportId = input.reportId;
         let expenseReports = prev.expenseReports;
-        if (!reportId) {
-          const existing = reports.find(
+        const requestedReport = reportId ? reports.find((item) => item.id === reportId) : undefined;
+        const usableReport = requestedReport && (requestedReport.status === "draft" || requestedReport.status === "rejected")
+          ? requestedReport
+          : undefined;
+        if (usableReport) {
+          reportId = usableReport.id;
+        } else {
+          const existingDraft = reports.find(
             (item) =>
-              item.assignmentId === input.assignmentId && item.readerId === input.readerId,
+              item.assignmentId === input.assignmentId &&
+              item.readerId === input.readerId &&
+              (item.status === "draft" || item.status === "rejected"),
           );
-          if (existing) {
-            reportId = existing.id;
+          if (existingDraft) {
+            reportId = existingDraft.id;
           } else {
             reportId = uid("exp");
             expenseReports = [
@@ -984,13 +1290,41 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
 
   const patchCompensation = useCallback(
     (id: string, patch: Partial<ReaderCompensation>) => {
-      persist((prev) => ({
-        ...prev,
-        compensationPatches: {
-          ...prev.compensationPatches,
-          [id]: { ...prev.compensationPatches[id], ...patch },
-        },
-      }));
+      persist((prev) => {
+        const current =
+          prev.compensation.find((item) => item.id === id) ??
+          seedCatalog.compensation.find((item) => item.id === id) ??
+          ({ ...prev.compensationPatches[id], id } as ReaderCompensation | undefined);
+        const merged = { ...(current ?? {}), ...prev.compensationPatches[id], ...patch };
+        let action: ActivityLogAction | null = null;
+        let title = "Payment updated";
+        if (patch.status === "approved") {
+          action = "payment_approved";
+          title = "Payment approved";
+        } else if (patch.status === "paid" || patch.paidOn) {
+          action = "payment_marked_paid";
+          title = "Payment marked paid";
+        } else if (patch.status === "cashed" || patch.cashedOn) {
+          action = "payment_marked_cashed";
+          title = "Payment marked cashed";
+        }
+        const trail = action
+          ? appendTrail(prev, {
+              action,
+              title,
+              assignmentId: merged.assignmentId,
+              href: "/admin/payments",
+            })
+          : { activityLog: prev.activityLog, notifications: prev.notifications };
+        return {
+          ...prev,
+          compensationPatches: {
+            ...prev.compensationPatches,
+            [id]: { ...prev.compensationPatches[id], ...patch },
+          },
+          ...trail,
+        };
+      });
     },
     [persist],
   );
@@ -1011,6 +1345,25 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
             : item,
         );
         const callSheets = upsert(supersededOverlay, supersededSeed);
+        const trail = appendTrail(
+          prev,
+          {
+            action: "call_sheet_issued",
+            title: `Call Sheet v${version} issued`,
+            eventId,
+            clientId: event?.clientId,
+            href: `/admin/call-sheets/${id}`,
+          },
+          {
+            type: "call_sheet",
+            title: "Call Sheet issued",
+            message: `${event?.name ?? "Event"} Call Sheet v${version} was issued to assigned readers.`,
+            severity: "info",
+            href: `/admin/call-sheets/${id}`,
+            relatedEntityType: "call_sheet",
+            relatedEntityId: id,
+          },
+        );
         return {
           ...prev,
           callSheets: [
@@ -1051,6 +1404,7 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
                 },
               ]
             : prev.activity,
+          ...trail,
         };
       });
       return id;
@@ -1070,43 +1424,89 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
 
   const patchEvent = useCallback(
     (id: string, patch: Partial<EventRecord>) => {
-      persist((prev) => ({
-        ...prev,
-        eventPatches: { ...prev.eventPatches, [id]: { ...prev.eventPatches[id], ...patch } },
-      }));
+      persist((prev) => {
+        const existing =
+          prev.events.find((item) => item.id === id) ??
+          seedCatalog.events.find((item) => item.id === id);
+        const merged = { ...(existing ?? {}), ...prev.eventPatches[id], ...patch };
+        const trail =
+          patch.status && patch.status !== existing?.status
+            ? appendTrail(prev, {
+                action: "event_status_changed",
+                title: `Event status → ${patch.status}`,
+                detail: existing?.name ?? id,
+                eventId: id,
+                clientId: merged.clientId,
+                href: `/admin/events/${id}`,
+              })
+            : { activityLog: prev.activityLog, notifications: prev.notifications };
+        return {
+          ...prev,
+          eventPatches: { ...prev.eventPatches, [id]: { ...prev.eventPatches[id], ...patch } },
+          ...trail,
+        };
+      });
     },
     [persist],
   );
 
   const confirmAssignment = useCallback(
     (id: string) => {
-      persist((prev) => ({
-        ...prev,
-        assignmentStatus: { ...prev.assignmentStatus, [id]: "assigned" },
-      }));
+      persist((prev) => {
+        const assignment = prev.assignments.find((item) => item.id === id) ?? seedCatalog.assignments.find((item) => item.id === id);
+        if (!assignment) return prev;
+        const event = prev.events.find((item) => item.id === assignment.eventId) ?? seedCatalog.events.find((item) => item.id === assignment.eventId);
+        const reader = seedCatalog.readers.find((item) => item.id === assignment.readerId);
+        const trail = appendTrail(prev, { action: "assignment_status_changed", title: "Assignment confirmed", detail: reader?.contractorName, eventId: assignment.eventId, clientId: event?.clientId, assignmentId: id, href: `/admin/assignments/${id}` });
+        return { ...prev, assignmentStatus: { ...prev.assignmentStatus, [id]: "assigned" }, ...trail };
+      });
     },
     [persist],
   );
 
   const setAssignmentStatus = useCallback(
     (id: string, status: AssignmentStatus) => {
-      persist((prev) => ({
-        ...prev,
-        assignmentStatus: { ...prev.assignmentStatus, [id]: status },
-      }));
+      persist((prev) => {
+        const assignment =
+          prev.assignments.find((item) => item.id === id) ??
+          seedCatalog.assignments.find((item) => item.id === id);
+        const event = assignment
+          ? seedCatalog.events.find((item) => item.id === assignment.eventId) ||
+            prev.events.find((item) => item.id === assignment.eventId)
+          : undefined;
+        const action: ActivityLogAction =
+          status === "declined"
+            ? "assignment_declined"
+            : status === "released_to_pool"
+              ? "assignment_released"
+              : "assignment_status_changed";
+        const trail = appendTrail(prev, {
+          action,
+          title: `Assignment → ${status}`,
+          eventId: assignment?.eventId,
+          clientId: event?.clientId,
+          assignmentId: id,
+          href: `/admin/assignments/${id}`,
+        });
+        return {
+          ...prev,
+          assignmentStatus: { ...prev.assignmentStatus, [id]: status },
+          ...trail,
+        };
+      });
     },
     [persist],
   );
 
   const prepareAssignmentNotice = useCallback(
     (assignmentId: string) => {
-      persist((prev) => ({
-        ...prev,
-        assignmentNotices: {
-          ...prev.assignmentNotices,
-          [assignmentId]: { preparedAt: new Date().toISOString(), status: "prepared" },
-        },
-      }));
+      persist((prev) => {
+        const assignment = prev.assignments.find((item) => item.id === assignmentId) ?? seedCatalog.assignments.find((item) => item.id === assignmentId);
+        const event = assignment ? (prev.events.find((item) => item.id === assignment.eventId) ?? seedCatalog.events.find((item) => item.id === assignment.eventId)) : undefined;
+        const reader = assignment ? seedCatalog.readers.find((item) => item.id === assignment.readerId) : undefined;
+        const trail = appendTrail(prev, { action: "assignment_status_changed", title: "Assignment notice prepared", detail: reader?.contractorName, eventId: assignment?.eventId, clientId: event?.clientId, assignmentId, href: `/admin/assignments/${assignmentId}` }, { type: "assignment", title: "Assignment notice ready", message: `${reader?.contractorName ?? "Reader"} notification is prepared for the usual email send.`, severity: "info", href: `/admin/assignments/${assignmentId}`, relatedEntityType: "assignment", relatedEntityId: assignmentId });
+        return { ...prev, assignmentNotices: { ...prev.assignmentNotices, [assignmentId]: { preparedAt: new Date().toISOString(), status: "prepared" } }, ...trail };
+      });
     },
     [persist],
   );
@@ -1196,7 +1596,413 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
     [catalog.events, persist],
   );
 
+  const createTask = useCallback(
+    (input: Omit<Task, "id" | "createdAt" | "completedAt">) => {
+      const id = uid("task");
+      const createdAt = new Date().toISOString();
+      persist((prev) => {
+        const trail = appendTrail(
+          prev,
+          {
+            action: "task_status_changed",
+            title: "Task created",
+            detail: input.title,
+            eventId: input.eventId,
+            clientId: input.clientId,
+            href: input.eventId ? `/admin/events/${input.eventId}` : "/admin",
+          },
+          {
+            type: "task",
+            title: "New task",
+            message: input.title,
+            severity: input.priority === "high" ? "high" : "info",
+            href: input.eventId ? `/admin/events/${input.eventId}` : "/admin",
+            relatedEntityType: "task",
+            relatedEntityId: id,
+          },
+        );
+        return { ...prev, tasks: [...prev.tasks, { ...input, id, createdAt }], ...trail };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const addFlight = useCallback(
+    (input: Omit<Flight, "id">) => {
+      const id = uid("flt");
+      persist((prev) => {
+        const event = catalog.events.find((item) => item.id === input.eventId);
+        const trail = appendTrail(prev, {
+          action: "travel_recorded",
+          title: "Flight recorded",
+          detail: `${input.airline}${input.flightNumber ? ` ${input.flightNumber}` : ""}`,
+          eventId: input.eventId,
+          clientId: event?.clientId,
+          href: `/admin/events/${input.eventId}`,
+        });
+        return { ...prev, flights: [...prev.flights, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [catalog.events, persist],
+  );
+
+  const addHotelStay = useCallback(
+    (input: Omit<HotelStay, "id">) => {
+      const id = uid("hotel");
+      persist((prev) => {
+        const event = catalog.events.find((item) => item.id === input.eventId);
+        const trail = appendTrail(prev, {
+          action: "travel_recorded",
+          title: "Hotel stay recorded",
+          detail: input.propertyName,
+          eventId: input.eventId,
+          clientId: event?.clientId,
+          href: `/admin/events/${input.eventId}`,
+        });
+        return { ...prev, hotelStays: [...prev.hotelStays, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [catalog.events, persist],
+  );
+
+  const addGroundTransfer = useCallback(
+    (input: Omit<GroundTransfer, "id">) => {
+      const id = uid("trf");
+      persist((prev) => {
+        const event = catalog.events.find((item) => item.id === input.eventId);
+        const trail = appendTrail(prev, {
+          action: "travel_recorded",
+          title: "Ground transfer recorded",
+          detail: input.provider || input.notes,
+          eventId: input.eventId,
+          clientId: event?.clientId,
+          href: `/admin/events/${input.eventId}`,
+        });
+        return { ...prev, groundTransfers: [...prev.groundTransfers, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [catalog.events, persist],
+  );
+
+  const addEventDocument = useCallback(
+    (input: Omit<EventDocument, "id" | "uploadedAt">) => {
+      const id = uid("doc");
+      persist((prev) => {
+        const event = catalog.events.find((item) => item.id === input.eventId);
+        const trail = appendTrail(
+          prev,
+          {
+            action: "document_uploaded",
+            title: "Event document uploaded",
+            detail: input.originalFilename,
+            eventId: input.eventId,
+            clientId: event?.clientId,
+            href: `/admin/events/${input.eventId}`,
+          },
+          {
+            type: "event",
+            title: "Event document added",
+            message: input.originalFilename,
+            severity: "info",
+            href: `/admin/events/${input.eventId}`,
+            relatedEntityType: "event_document",
+            relatedEntityId: id,
+          },
+        );
+        return {
+          ...prev,
+          eventDocuments: [...prev.eventDocuments, { ...input, id, uploadedAt: new Date().toISOString() }],
+          ...trail,
+        };
+      });
+      return id;
+    },
+    [catalog.events, persist],
+  );
+
+  const patchFlight = useCallback(
+    (id: string, patch: Partial<Flight>) =>
+      persist((prev) => ({ ...prev, flights: upsert(prev.flights, [{ ...(prev.flights.find((item) => item.id === id) ?? seedCatalog.flights.find((item) => item.id === id)!), ...patch }]) })),
+    [persist],
+  );
+
+  const patchHotelStay = useCallback(
+    (id: string, patch: Partial<HotelStay>) =>
+      persist((prev) => ({ ...prev, hotelStays: upsert(prev.hotelStays, [{ ...(prev.hotelStays.find((item) => item.id === id) ?? seedCatalog.hotelStays.find((item) => item.id === id)!), ...patch }]) })),
+    [persist],
+  );
+
+  const patchGroundTransfer = useCallback(
+    (id: string, patch: Partial<GroundTransfer>) =>
+      persist((prev) => ({ ...prev, groundTransfers: upsert(prev.groundTransfers, [{ ...(prev.groundTransfers.find((item) => item.id === id) ?? seedCatalog.groundTransfers.find((item) => item.id === id)!), ...patch }]) })),
+    [persist],
+  );
+
+  const setTaskStatus = useCallback(
+    (id: string, status: TaskStatus) => {
+      persist((prev) => {
+        const existing =
+          prev.tasks.find((item) => item.id === id) ??
+          seedCatalog.tasks.find((item) => item.id === id);
+        if (!existing) return prev;
+        const completedAt = status === "done" ? new Date().toISOString() : undefined;
+        const nextTask: Task = {
+          ...existing,
+          status,
+          completedAt: status === "done" ? completedAt : undefined,
+        };
+        const trail = appendTrail(
+          prev,
+          {
+            action: status === "done" ? "task_completed" : "task_status_changed",
+            title: status === "done" ? "Task completed" : `Task → ${status}`,
+            detail: existing.title,
+            eventId: existing.eventId,
+            clientId: existing.clientId,
+            href: existing.eventId ? `/admin/events/${existing.eventId}` : "/admin",
+          },
+          status === "done"
+            ? {
+                type: "task",
+                title: "Task completed",
+                message: existing.title,
+                severity: "info",
+                href: existing.eventId ? `/admin/events/${existing.eventId}` : "/admin",
+                relatedEntityType: "task",
+                relatedEntityId: id,
+              }
+            : undefined,
+        );
+        return {
+          ...prev,
+          tasks: upsert(prev.tasks, [nextTask]),
+          ...trail,
+        };
+      });
+    },
+    [persist],
+  );
+
+  const addAvailabilityBlock = useCallback(
+    (input: Omit<AvailabilityBlock, "id">) => {
+      const id = uid("av");
+      persist((prev) => {
+        const reader = seedCatalog.readers.find((item) => item.id === input.readerId);
+        const trail = appendTrail(prev, {
+          action: "availability_changed",
+          title: `${input.kind === "available" ? "Availability added" : "Unavailable block added"}`,
+          detail: `${reader?.contractorName ?? "Reader"} · ${input.startsAt.slice(0, 10)}`,
+        });
+        return { ...prev, availability: [...prev.availability, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const removeAvailabilityBlock = useCallback(
+    (id: string) => {
+      persist((prev) => {
+        const existing = prev.availability.find((item) => item.id === id) ?? seedCatalog.availability.find((item) => item.id === id);
+        if (!existing) return prev;
+        const trail = appendTrail(prev, { action: "availability_changed", title: "Availability block removed", detail: existing.notes });
+        return { ...prev, availability: prev.availability.filter((item) => item.id !== id), removedAvailabilityIds: [...new Set([...prev.removedAvailabilityIds, id])], ...trail };
+      });
+    },
+    [persist],
+  );
+
+  const addPersonalTimeBlock = useCallback(
+    (input: Omit<PersonalTimeBlock, "id">) => {
+      const id = uid("personal");
+      persist((prev) => {
+        const trail = appendTrail(prev, { action: "personal_block_added", title: "Personal calendar block added", detail: input.title });
+        return { ...prev, personalBlocks: [...prev.personalBlocks, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const removePersonalTimeBlock = useCallback(
+    (id: string) => {
+      persist((prev) => {
+        const existing = prev.personalBlocks.find((item) => item.id === id) ?? seedCatalog.personalBlocks.find((item) => item.id === id);
+        if (!existing) return prev;
+        const trail = appendTrail(prev, { action: "personal_block_added", title: "Personal calendar block removed", detail: existing.title });
+        return { ...prev, personalBlocks: prev.personalBlocks.filter((item) => item.id !== id), removedPersonalBlockIds: [...new Set([...prev.removedPersonalBlockIds, id])], ...trail };
+      });
+    },
+    [persist],
+  );
+
+  const addCalendarNote = useCallback(
+    (input: Omit<CalendarNote, "id">) => {
+      const id = uid("calnote");
+      persist((prev) => {
+        const trail = appendTrail(prev, { action: "calendar_note_added", title: "Calendar note added", detail: input.note, eventId: input.eventId });
+        return { ...prev, calendarNotes: [...prev.calendarNotes, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const createInvoice = useCallback(
+    (input: Omit<Invoice, "id">) => {
+      const id = uid("inv");
+      persist((prev) => {
+        const event = input.eventId
+          ? prev.events.find((item) => item.id === input.eventId) ??
+            seedCatalog.events.find((item) => item.id === input.eventId)
+          : undefined;
+        const trail = appendTrail(
+          prev,
+          {
+            action: "invoice_updated",
+            title: "Invoice draft created",
+            detail: `${input.amountCents / 100}`,
+            eventId: input.eventId,
+            clientId: input.clientId,
+            href: input.eventId ? `/admin/events/${input.eventId}` : "/admin/financial",
+          },
+          {
+            type: "payment",
+            title: "Invoice draft created",
+            message: `${event?.name ?? "University invoice"} now has a tracking invoice draft.`,
+            severity: "info",
+            href: input.eventId ? `/admin/events/${input.eventId}` : "/admin/financial",
+            relatedEntityType: "invoice",
+            relatedEntityId: id,
+          },
+        );
+        return { ...prev, invoices: [...prev.invoices, { ...input, id }], ...trail };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const patchInvoice = useCallback(
+    (id: string, patch: Partial<Invoice>) => {
+      persist((prev) => {
+        const current = prev.invoices.find((item) => item.id === id) ?? seedCatalog.invoices.find((item) => item.id === id);
+        if (!current) return prev;
+        const merged = { ...current, ...patch };
+        const event = merged.eventId ? (prev.events.find((item) => item.id === merged.eventId) ?? seedCatalog.events.find((item) => item.id === merged.eventId)) : undefined;
+        const trail = appendTrail(prev, {
+          action: "invoice_updated",
+          title: `Invoice ${merged.status}`,
+          detail: `${merged.amountCents / 100}` ,
+          eventId: merged.eventId,
+          clientId: merged.clientId,
+          href: merged.eventId ? `/admin/events/${merged.eventId}` : "/admin/financial",
+        }, {
+          type: "payment",
+          title: `Invoice ${merged.status}`,
+          message: `${event?.name ?? "University invoice"} is now ${merged.status}.`,
+          severity: merged.status === "paid" ? "info" : "warning",
+          href: merged.eventId ? `/admin/events/${merged.eventId}` : "/admin/financial",
+          relatedEntityType: "invoice",
+          relatedEntityId: id,
+        });
+        return { ...prev, invoices: upsert(prev.invoices, [merged]), ...trail };
+      });
+    },
+    [persist],
+  );
+
+  const recordUniversityPayment = useCallback(
+    (input: Omit<UniversityPayment, "id">) => {
+      const id = uid("upay");
+      persist((prev) => {
+        const invoice = prev.invoices.find((item) => item.id === input.invoiceId) ?? seedCatalog.invoices.find((item) => item.id === input.invoiceId);
+        if (!invoice) return prev;
+        const existingPayments = upsert(seedCatalog.universityPayments, prev.universityPayments).filter((item) => item.invoiceId === input.invoiceId);
+        const paidTotal = existingPayments.reduce((sum, item) => sum + item.amountCents, 0) + input.amountCents;
+        const nextStatus = paidTotal >= invoice.amountCents ? "paid" : "due";
+        const nextInvoice = { ...invoice, status: nextStatus as Invoice["status"], paidOn: nextStatus === "paid" ? input.paidOn : invoice.paidOn };
+        const event = invoice.eventId ? (prev.events.find((item) => item.id === invoice.eventId) ?? seedCatalog.events.find((item) => item.id === invoice.eventId)) : undefined;
+        const trail = appendTrail(prev, {
+          action: "university_payment_recorded",
+          title: "University payment recorded",
+          detail: `${input.amountCents / 100}` ,
+          eventId: invoice.eventId,
+          clientId: invoice.clientId,
+          href: "/admin/financial",
+        }, {
+          type: "payment",
+          title: "University payment recorded",
+          message: `${event?.name ?? "University invoice"} received a tracked payment.`,
+          severity: "info",
+          href: "/admin/financial",
+          relatedEntityType: "invoice",
+          relatedEntityId: input.invoiceId,
+        });
+        return {
+          ...prev,
+          universityPayments: [...prev.universityPayments, { ...input, id }],
+          invoices: upsert(prev.invoices, [nextInvoice]),
+          ...trail,
+        };
+      });
+      return id;
+    },
+    [persist],
+  );
+
+  const setNotificationPreference = useCallback(
+    (key: NotificationPreferenceKey, enabled: boolean) => {
+      persist((prev) => ({
+        ...prev,
+        notificationPreferences: { ...prev.notificationPreferences, [key]: enabled },
+      }));
+    },
+    [persist],
+  );
+
+  const markNotificationRead = useCallback(
+    (id: string) => {
+      persist((prev) => {
+        const existing =
+          prev.notifications.find((item) => item.id === id) ??
+          seedCatalog.notifications.find((item) => item.id === id);
+        if (!existing || existing.readAt) return prev;
+        const readAt = new Date().toISOString();
+        const trail = appendTrail(prev, {
+          action: "notification_read",
+          title: "Notification marked read",
+          detail: existing.title,
+        });
+        return {
+          ...prev,
+          notifications: upsert(prev.notifications, [{ ...existing, readAt }]),
+          activityLog: trail.activityLog,
+        };
+      });
+    },
+    [persist],
+  );
+
+  const markAllNotificationsRead = useCallback(() => {
+    persist((prev) => {
+      const readAt = new Date().toISOString();
+      const merged = upsert(seedCatalog.notifications, prev.notifications).map((item) =>
+        item.readAt ? item : { ...item, readAt },
+      );
+      return {
+        ...prev,
+        notifications: merged,
+      };
+    });
+  }, [persist]);
+
   const reset = useCallback(() => {
+    clearPersistedRaw();
     persist(blankOverlay());
     try {
       sessionStorage.removeItem("vti-demo-reader");
@@ -1228,7 +2034,18 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       Object.keys(overlay.eventPatches).length +
       Object.keys(overlay.assignmentNotices ?? {}).length +
       (overlay.notes?.length ?? 0) +
-      (overlay.workspaceDocuments?.length ?? 0) >
+      (overlay.workspaceDocuments?.length ?? 0) +
+      (overlay.tasks?.length ?? 0) +
+      (overlay.notifications?.length ?? 0) +
+      (overlay.activityLog?.length ?? 0) +
+      (overlay.availability?.length ?? 0) +
+      (overlay.personalBlocks?.length ?? 0) +
+      (overlay.calendarNotes?.length ?? 0) +
+      (overlay.invoices?.length ?? 0) +
+      (overlay.universityPayments?.length ?? 0) +
+      (overlay.removedAvailabilityIds?.length ?? 0) +
+      (overlay.removedPersonalBlockIds?.length ?? 0) +
+      (overlay.removedCalendarNoteIds?.length ?? 0) >
     0;
 
   const value = useMemo<OperationsContextValue>(
@@ -1269,6 +2086,27 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       addWorkspaceDocument,
       workspaceDocuments: overlay.workspaceDocuments ?? [],
       submitDebrief,
+      setTaskStatus,
+      createTask,
+      createInvoice,
+      addFlight,
+      addHotelStay,
+      addGroundTransfer,
+      addEventDocument,
+      patchFlight,
+      patchHotelStay,
+      patchGroundTransfer,
+      addAvailabilityBlock,
+      removeAvailabilityBlock,
+      addPersonalTimeBlock,
+      removePersonalTimeBlock,
+      addCalendarNote,
+      patchInvoice,
+      recordUniversityPayment,
+      notificationPreferences: overlay.notificationPreferences,
+      setNotificationPreference,
+      markNotificationRead,
+      markAllNotificationsRead,
       reset,
       hasOverrides,
       ready,
@@ -1310,6 +2148,27 @@ export function OperationsProvider({ children }: { children: ReactNode }) {
       addWorkspaceDocument,
       overlay.workspaceDocuments,
       submitDebrief,
+      setTaskStatus,
+      createTask,
+      createInvoice,
+      addFlight,
+      addHotelStay,
+      addGroundTransfer,
+      addEventDocument,
+      patchFlight,
+      patchHotelStay,
+      patchGroundTransfer,
+      addAvailabilityBlock,
+      removeAvailabilityBlock,
+      addPersonalTimeBlock,
+      removePersonalTimeBlock,
+      addCalendarNote,
+      patchInvoice,
+      recordUniversityPayment,
+      overlay.notificationPreferences,
+      setNotificationPreference,
+      markNotificationRead,
+      markAllNotificationsRead,
       reset,
       hasOverrides,
       ready,

@@ -31,13 +31,22 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [desktop, setDesktop] = useState(false);
   const { notify } = useToast();
   const { hasOverrides, reset } = useDemoSession();
-  const { queries, search } = useOperations();
+  const { queries, search, markNotificationRead } = useOperations();
   const metrics = queries.dashboardMetrics();
+  const unreadNotifications = queries.unreadNotifications();
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const hits = useMemo(() => search(query), [query, search]);
   const alertItems = [
+    ...unreadNotifications.map((item) => ({
+      id: `ntf-${item.id}`,
+      label: item.title,
+      onSelect: () => {
+        markNotificationRead(item.id);
+        if (item.href) router.push(item.href);
+      },
+    })),
     ...metrics.unsignedCallSheets.map((item) => ({
       id: `ack-${item.id}`,
       label: `${item.reader.contractorName.split(" ")[0]}'s Call Sheet is unsigned`,

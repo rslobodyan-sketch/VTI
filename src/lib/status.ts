@@ -60,6 +60,13 @@ export function toneFor(kind: string, value: string): BadgeTone {
     "client:prospect": "info",
     "client:active": "success",
     "client:inactive": "neutral",
+    "readiness:ready": "success",
+    "readiness:attention": "warning",
+    "readiness:missing": "danger",
+    "travel:confirmed": "success",
+    "travel:pending": "warning",
+    "travel:missing": "danger",
+    "travel:not_required": "neutral",
   };
   return map[key] ?? "neutral";
 }

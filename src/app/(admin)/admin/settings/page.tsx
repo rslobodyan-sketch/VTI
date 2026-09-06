@@ -16,12 +16,9 @@ import { labelize } from "@/lib/status";
 import type { WorkspaceDocumentCategory } from "@/types/domain";
 
 export default function AdminSettingsPage() {
-  const { addWorkspaceDocument, workspaceDocuments } = useOperations();
+  const { addWorkspaceDocument, workspaceDocuments, notificationPreferences, setNotificationPreference } = useOperations();
   const { notify } = useToast();
-  const [notifyAck, setNotifyAck] = useState(true);
-  const [notifyOffers, setNotifyOffers] = useState(true);
-  const [notifyExpenses, setNotifyExpenses] = useState(true);
-  const [notifyInsurance, setNotifyInsurance] = useState(true);
+  
   const [docFilename, setDocFilename] = useState("");
   const [docCategory, setDocCategory] = useState<WorkspaceDocumentCategory>("rate_sheet");
   const [docNote, setDocNote] = useState("");
@@ -65,8 +62,8 @@ export default function AdminSettingsPage() {
             <input
               type="checkbox"
               className="size-4 shrink-0 accent-[var(--accent)]"
-              checked={notifyAck}
-              onChange={(event) => setNotifyAck(event.target.checked)}
+              checked={notificationPreferences.call_sheet_ack}
+              onChange={(event) => setNotificationPreference("call_sheet_ack", event.target.checked)}
             />
             Call Sheet acknowledgements outstanding
           </label>
@@ -74,8 +71,8 @@ export default function AdminSettingsPage() {
             <input
               type="checkbox"
               className="size-4 shrink-0 accent-[var(--accent)]"
-              checked={notifyOffers}
-              onChange={(event) => setNotifyOffers(event.target.checked)}
+              checked={notificationPreferences.assignment_offers}
+              onChange={(event) => setNotificationPreference("assignment_offers", event.target.checked)}
             />
             Assignment offers awaiting response
           </label>
@@ -83,8 +80,8 @@ export default function AdminSettingsPage() {
             <input
               type="checkbox"
               className="size-4 shrink-0 accent-[var(--accent)]"
-              checked={notifyExpenses}
-              onChange={(event) => setNotifyExpenses(event.target.checked)}
+              checked={notificationPreferences.expenses}
+              onChange={(event) => setNotificationPreference("expenses", event.target.checked)}
             />
             Expenses awaiting review
           </label>
@@ -92,13 +89,13 @@ export default function AdminSettingsPage() {
             <input
               type="checkbox"
               className="size-4 shrink-0 accent-[var(--accent)]"
-              checked={notifyInsurance}
-              onChange={(event) => setNotifyInsurance(event.target.checked)}
+              checked={notificationPreferences.insurance}
+              onChange={(event) => setNotificationPreference("insurance", event.target.checked)}
             />
             University insurance reminders
           </label>
           <p className="text-xs text-ink-muted">
-            Preferences apply to this workspace session. External email delivery is not connected.
+            Preferences persist in this MVP browser workspace. External email delivery is not connected.
           </p>
         </div>
       </Section>

@@ -21,6 +21,7 @@ import {
   formatMonthTitle,
   formatTime,
   weekdaySundayIndex,
+  chicagoWallToIso,
 } from "@/lib/format";
 import { labelize } from "@/lib/status";
 import type { CalendarDayEvent } from "@/data/queries";
@@ -55,7 +56,7 @@ function demoAsOfDate() {
 
 export function MonthCalendar() {
   const queries = useLiveQueries();
-  const { catalog } = useOperations();
+  const { catalog, addAvailabilityBlock, removeAvailabilityBlock, addPersonalTimeBlock, removePersonalTimeBlock } = useOperations();
   const asOf = demoAsOfDate();
   const [{ year, month }, setView] = useState(() =>
     defaultAssignedCalendarMonth(
@@ -63,6 +64,19 @@ export function MonthCalendar() {
       asOf,
     ),
   );
+  const [availabilityReaderId, setAvailabilityReaderId] = useState("");
+  const [availabilityKind, setAvailabilityKind] = useState<"available" | "unavailable">("unavailable");
+  const [availabilityDate, setAvailabilityDate] = useState("");
+  const [availabilityStart, setAvailabilityStart] = useState("09:00");
+  const [availabilityEnd, setAvailabilityEnd] = useState("18:00");
+  const [availabilityNote, setAvailabilityNote] = useState("");
+  const [personalTitle, setPersonalTitle] = useState("");
+  const [personalDate, setPersonalDate] = useState("");
+  const [personalStart, setPersonalStart] = useState("09:00");
+  const [personalEnd, setPersonalEnd] = useState("12:00");
+  const [personalNote, setPersonalNote] = useState("");
+
+
   const [selected, setSelected] = useState<{
     dateKey: string;
     eventId: string;
@@ -343,6 +357,50 @@ export function MonthCalendar() {
             ))}
           </ul>
         </aside>
+      </div>
+
+      <div className="grid gap-6 border-t border-line pt-5 lg:grid-cols-2">
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-serif text-lg font-semibold">Reader availability & conflicts</h2>
+            <p className="text-sm text-ink-muted">Keep Chester&apos;s availability list close to the calendar. Conflicts are checked against event windows.</p>
+          </div>
+          <form className="grid gap-3 border border-line bg-paper-raised p-4" onSubmit={(e) => {
+            e.preventDefault();
+            if (!availabilityReaderId || !availabilityDate) return;
+            addAvailabilityBlock({ readerId: availabilityReaderId, kind: availabilityKind, startsAt: chicagoWallToIso(availabilityDate, availabilityStart), endsAt: chicagoWallToIso(availabilityDate, availabilityEnd), notes: availabilityNote || `${availabilityKind === "available" ? "Available" : "Unavailable"} block entered by Chester.`, source: "admin_entered" });
+            setAvailabilityNote("");
+          }}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="grid gap-1 text-sm"><span className="text-ink-muted">Reader</span><select className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2" value={availabilityReaderId} onChange={(e) => setAvailabilityReaderId(e.target.value)}><option value="">Choose reader</option>{catalog.readers.map((r) => <option key={r.id} value={r.id}>{r.contractorName}</option>)}</select></label>
+              <label className="grid gap-1 text-sm"><span className="text-ink-muted">Type</span><select className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2" value={availabilityKind} onChange={(e) => setAvailabilityKind(e.target.value as "available" | "unavailable")}><option value="unavailable">Unavailable</option><option value="available">Available</option></select></label>
+              <label className="grid gap-1 text-sm"><span className="text-ink-muted">Date</span><input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2" type="date" value={availabilityDate} onChange={(e) => setAvailabilityDate(e.target.value)} /></label>
+              <label className="grid gap-1 text-sm"><span className="text-ink-muted">Start / end</span><span className="flex gap-2"><input className="h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border border-line bg-paper px-2" type="time" value={availabilityStart} onChange={(e) => setAvailabilityStart(e.target.value)} /><input className="h-10 min-w-0 flex-1 rounded-[var(--radius-md)] border border-line bg-paper px-2" type="time" value={availabilityEnd} onChange={(e) => setAvailabilityEnd(e.target.value)} /></span></label>
+            </div>
+            <input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" value={availabilityNote} onChange={(e) => setAvailabilityNote(e.target.value)} placeholder="Optional note" />
+            <Button size="sm" type="submit">Save availability block</Button>
+          </form>
+          <ul className="grid gap-0 border-y border-line text-sm">{catalog.availability.slice().sort((a,b)=>a.startsAt.localeCompare(b.startsAt)).slice(0,8).map((block) => <li key={block.id} className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-b-0"><span><span className="font-medium">{catalog.readers.find(r=>r.id===block.readerId)?.contractorName}</span> · {block.kind} · {dayKey(block.startsAt)}</span><button type="button" className="text-accent underline-offset-2 hover:underline" onClick={() => removeAvailabilityBlock(block.id)}>Remove</button></li>)}</ul>
+        </section>
+
+        <section className="grid gap-3">
+          <div>
+            <h2 className="font-serif text-lg font-semibold">Personal / external commitments</h2>
+            <p className="text-sm text-ink-muted">Admin-only blocks can sit beside university work so venue or personal conflicts are visible.</p>
+          </div>
+          <form className="grid gap-3 border border-line bg-paper-raised p-4" onSubmit={(e) => {
+            e.preventDefault();
+            if (!personalTitle || !personalDate) return;
+            addPersonalTimeBlock({ title: personalTitle, startsAt: chicagoWallToIso(personalDate, personalStart), endsAt: chicagoWallToIso(personalDate, personalEnd), notes: personalNote, showOnOperationalCalendar: true });
+            setPersonalTitle(""); setPersonalNote("");
+          }}>
+            <input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" value={personalTitle} onChange={(e) => setPersonalTitle(e.target.value)} placeholder="Personal or external commitment" />
+            <div className="grid gap-3 sm:grid-cols-3"><input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" type="date" value={personalDate} onChange={(e) => setPersonalDate(e.target.value)} /><input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" type="time" value={personalStart} onChange={(e) => setPersonalStart(e.target.value)} /><input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" type="time" value={personalEnd} onChange={(e) => setPersonalEnd(e.target.value)} /></div>
+            <input className="h-10 rounded-[var(--radius-md)] border border-line bg-paper px-2 text-sm" value={personalNote} onChange={(e) => setPersonalNote(e.target.value)} placeholder="Optional private note" />
+            <Button size="sm" type="submit">Add personal block</Button>
+          </form>
+          <ul className="grid gap-0 border-y border-line text-sm">{catalog.personalBlocks.map((block) => <li key={block.id} className="flex items-center justify-between gap-3 border-b border-line py-2 last:border-b-0"><span><span className="font-medium">{block.title}</span> · {dayKey(block.startsAt)}</span><button type="button" className="text-accent underline-offset-2 hover:underline" onClick={() => removePersonalTimeBlock(block.id)}>Remove</button></li>)}</ul>
+        </section>
       </div>
 
       <Dialog

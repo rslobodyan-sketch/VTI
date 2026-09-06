@@ -32,7 +32,7 @@ test.describe("Call Sheets, assignments, expenses", () => {
     await expect(page.getByText("Version 2", { exact: true })).toBeVisible();
 
     await page.goto(v1Url);
-    await expect(page.getByText(/superseded/i)).toBeVisible();
+    await expect(page.getByText("Superseded", { exact: true }).first()).toBeVisible();
 
     await page.goto("/reader/call-sheets");
     await switchReader(page, SAM);

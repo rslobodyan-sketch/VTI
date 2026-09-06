@@ -4,7 +4,7 @@ export const UNI = "Gen Commencement University";
 export const EVENT = "Gen Commencement";
 export const CEREMONY = "Saturday commencement";
 export const VENUE = "Gen Hall";
-export const EVENT_DATE = "2026-11-21";
+export const EVENT_DATE = "2026-12-05";
 export const PAY = "2800";
 export const PAY_LABEL = "$2,800.00";
 export const SAM = "Sam Okonkwo";
@@ -66,13 +66,18 @@ export async function createInquiryForUniversity(page: Page, university = UNI) {
   ]) {
     await page.getByRole("button", { name: label }).click();
   }
-  await expect(page.getByText("Won")).toBeVisible();
+  await expect(page.getByText("Won", { exact: true }).first()).toBeVisible();
 }
 
 export async function createGenEvent(page: Page) {
   if (!page.url().includes("/admin/events/new")) {
     await page.getByRole("link", { name: "Create event" }).click();
   }
+  // Always bind this demo event to the university created by the test.
+  // The generic New Event screen may otherwise default to the first seeded
+  // university, which would make the reader-facing workflow point at the
+  // wrong university.
+  await page.locator("#ev-uni").selectOption({ label: UNI });
   await page.locator("#ev-name").fill(EVENT);
   await page.locator("#cer-name").fill(CEREMONY);
   await page.locator("#cer-date").fill(EVENT_DATE);

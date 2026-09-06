@@ -22,6 +22,7 @@ const adminRoutes = [
   "/admin/expenses",
   "/admin/expenses/exp-walden-marcus",
   "/admin/debriefs",
+  "/admin/financial",
   "/admin/payments",
   "/admin/settings",
 ];

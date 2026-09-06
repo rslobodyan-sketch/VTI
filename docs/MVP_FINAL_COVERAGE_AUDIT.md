@@ -24,6 +24,9 @@ Operable in this demo walkthrough:
 - Versioned Call Sheets (issue new version; prior issued versions superseded)
 - Click-to-accept Call Sheet acknowledgement (working assumption until Chester decides otherwise)
 - Reader mobile packet: Home → assignment → Call Sheet → files → expenses → debrief → profile → calendar
+- Reader expense capture is available directly from the Expenses area for any active/completed assignment; additional receipts after an approved/paid report create a new draft report rather than mutating a closed report.
+- Reader payment history is visible to the reader for their own compensation/reimbursement records only.
+- New events automatically receive a VTI tracking-copy estimate draft; admins can create a tracking invoice draft from the event without implying that Wave has been updated.
 - Installable PWA assets (manifest, icons, `sw.js`, standalone / safe-area). Not a native app.
 - Expense draft → submit → Chester review
 - Debrief form and admin list
@@ -248,7 +251,7 @@ Do not claim production readiness. Language: **demo-ready MVP**.
 | Event / ceremony handling | Create + detail; travel, lodging, transfers | IMPLEMENTED | Yes | Database | Ceremony times stored as UTC from America/Chicago wall clock. |
 | Operational calendar | Month grid (desktop) + list (narrow); university color | IMPLEMENTED | Yes | Database | Visual density still a Chester sample question. |
 | Reader onboarding / profile (admin) | Reader detail, masked tax, document expiration | DEMO/TRACKING | Yes | Patriot + encrypted files + auth | Patriot remains master profile SOT. |
-| Reader profile (reader view, no self-edit) | `/reader/profile` read-only | IMPLEMENTED | Yes | Auth | Matches OQ-07 working assumption. |
+| Reader profile (reader view, no self-edit) | `/reader/profile` read-only + own payment history | IMPLEMENTED | Yes | Auth | Own compensation/reimbursement history only; sensitive onboarding data remains hidden. |
 | Availability | Admin-entered unavailable blocks | NEEDS CHESTER | Yes (admin-entered) | — | Readers cannot edit. |
 | Assignments as operational hub | Offer / accept; pay tracking row created on offer | IMPLEMENTED | Yes | Database + auth | Admin offers; reader accepts. |
 | Versioned Call Sheets | Issue new version; prior issued superseded | IMPLEMENTED | Yes | Database | Generated from structured event/assignment data. |
@@ -256,7 +259,7 @@ Do not claim production readiness. Language: **demo-ready MVP**.
 | University documents in reader packet | Files and notes on assignment hub | DEMO/TRACKING | Yes | Encrypted file storage | Filenames and status notes; no blob storage. |
 | Name-list delivery | Status notes surface as operational issues | NEEDS CHESTER | Partial | File pipeline | How lists arrive is unanswered. |
 | Reader mobile packet | Routes + bottom nav; More includes calendar and debrief | IMPLEMENTED | Yes | Auth + PWA on HTTPS | Not a native app. |
-| Receipt capture | Camera/file input; filename only | DEMO/TRACKING | Yes | File storage | Avoids stuffing images into sessionStorage. |
+| Receipt capture | Camera/file input; filename + date/amount/category/description; filename only in storage | DEMO/TRACKING | Yes | File storage | Additional receipts after closed reports create a new draft; avoids stuffing images into sessionStorage. |
 | Expense submit / review / approve | Draft → submitted → approved / returned | IMPLEMENTED | Yes | Database | Reimbursed payout is payment tracking, not the same click. |
 | Debrief | Reader form; admin list; work-again marked by Chester | IMPLEMENTED | Yes | Database | Attached to assignment/event. |
 | Insurance / COI reminders | University insurance due; reader DL/passport expiration | IMPLEMENTED | Yes | Database + real dates | Tracking/reminders only. |

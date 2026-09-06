@@ -41,7 +41,10 @@ export const adminNav: NavGroup[] = [
   },
   {
     label: "Money",
-    items: [{ href: "/admin/payments", label: "Payments" }],
+    items: [
+      { href: "/admin/financial", label: "Financial" },
+      { href: "/admin/payments", label: "Payments" },
+    ],
   },
   {
     label: "System",

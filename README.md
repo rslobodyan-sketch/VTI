@@ -1,36 +1,34 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VTI Operations MVP
 
-## Getting Started
+Voice Talent International — browser-based operations MVP.
 
-First, run the development server:
+## Start locally
 
-```bash
+```powershell
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Release QA
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Run the complete release gate:
 
-## Learn More
+```powershell
+npm run test:release
+```
 
-To learn more about Next.js, take a look at the following resources:
+The gate runs type checking, linting, production build, client acceptance tests, responsive smoke tests and route smoke tests.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Client demo
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Use `docs/CHESTER_DEMO_RUNBOOK.md` for the recommended Chester walkthrough.
 
-## Deploy on Vercel
+Before a demo, open **Account → Clear session changes** so the workspace starts from the clean seed story.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## MVP boundary
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This is a **demo-ready MVP**, not a production-ready system. Wave, Patriot, bank feeds, authentication, production database/storage, university portal, live email and native applications are intentionally deferred. The UI does not claim those integrations are connected.
+
+See `docs/VTI_MVP_FREEZE.md` for the release status and `docs/MVP_FINAL_COVERAGE_AUDIT.md` for detailed coverage.

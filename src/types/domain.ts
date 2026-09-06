@@ -253,6 +253,67 @@ export type CallSheetAcknowledgement = {
   method: "click_accept";
 };
 
+export type TravelPaidBy = "vti" | "reader" | "university" | "unknown";
+
+export type TravelConfirmationStatus = "confirmed" | "pending" | "missing" | "not_required";
+
+/** Structured flight replacing airfare prose where seeded. */
+export type Flight = {
+  id: string;
+  eventId: string;
+  readerId?: string;
+  airline: string;
+  flightNumber?: string;
+  departsAt: string;
+  arrivesAt: string;
+  paidBy: TravelPaidBy;
+  amountCents?: number;
+  status: TravelConfirmationStatus;
+  confirmation?: string;
+  notes?: string;
+};
+
+export type HotelStay = {
+  id: string;
+  eventId: string;
+  readerId?: string;
+  propertyName: string;
+  checkInDate: string;
+  checkOutDate: string;
+  roomCount?: number;
+  estimateCents?: number;
+  status: TravelConfirmationStatus;
+  confirmation?: string;
+  notes?: string;
+};
+
+export type GroundTransfer = {
+  id: string;
+  eventId: string;
+  readerId?: string;
+  provider?: string;
+  notes: string;
+  estimateCents?: number;
+  status: TravelConfirmationStatus;
+};
+
+export type ReadinessLevel = "ready" | "attention" | "missing";
+
+export type EventReadinessAreaKey =
+  | "staffing"
+  | "travel"
+  | "call_sheet"
+  | "documents"
+  | "financial"
+  | "tasks";
+
+export type EventReadinessArea = {
+  key: EventReadinessAreaKey;
+  label: string;
+  level: ReadinessLevel;
+  summary: string;
+};
+
 /** Overlay-only. Email is not connected — this records that a notice was prepared. */
 export type AssignmentNotice = {
   assignmentId: string;
@@ -268,6 +329,10 @@ export type EventDocument = {
   originalFilename: string;
   statusNote: string;
   visibleToAssignedReaders: boolean;
+  fileKey?: string;
+  mimeType?: string;
+  sizeBytes?: number;
+  uploadedAt?: string;
 };
 
 export type ReaderDocument = {
@@ -418,6 +483,101 @@ export type WorkspaceDocument = {
   recordedAt: string;
 };
 
+export type TaskStatus = "open" | "in_progress" | "done" | "cancelled" | "snoozed";
+
+export type TaskPriority = "low" | "medium" | "high";
+
+/** Operational work item for Chester (MVP Command Center precursor). */
+export type Task = {
+  id: string;
+  title: string;
+  description: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  dueAt?: string;
+  eventId?: string;
+  clientId?: string;
+  assigneeName: string;
+  createdAt: string;
+  completedAt?: string;
+};
+
+export type AppNotificationSeverity = "info" | "warning" | "high";
+
+export type AppNotificationType =
+  | "assignment"
+  | "call_sheet"
+  | "expense"
+  | "payment"
+  | "task"
+  | "event"
+  | "general";
+
+/** Durable in-app notification. Not email/SMS. */
+export type AppNotification = {
+  id: string;
+  type: AppNotificationType;
+  title: string;
+  message: string;
+  createdAt: string;
+  readAt?: string;
+  severity: AppNotificationSeverity;
+  href?: string;
+  relatedEntityType?: string;
+  relatedEntityId?: string;
+};
+
+
+export type NotificationPreferenceKey =
+  | "call_sheet_ack"
+  | "assignment_offers"
+  | "expenses"
+  | "insurance"
+  | "payments"
+  | "tasks";
+
+export type NotificationPreferences = Record<NotificationPreferenceKey, boolean>;
+
+export type ActivityLogAction =
+  | "assignment_offered"
+  | "assignment_accepted"
+  | "assignment_declined"
+  | "assignment_released"
+  | "assignment_status_changed"
+  | "call_sheet_issued"
+  | "call_sheet_acknowledged"
+  | "expense_submitted"
+  | "expense_approved"
+  | "expense_rejected"
+  | "payment_approved"
+  | "payment_marked_paid"
+  | "payment_marked_cashed"
+  | "task_completed"
+  | "task_status_changed"
+  | "travel_recorded"
+  | "availability_changed"
+  | "personal_block_added"
+  | "calendar_note_added"
+  | "invoice_updated"
+  | "university_payment_recorded"
+  | "document_uploaded"
+  | "event_status_changed"
+  | "notification_read";
+
+/** Lightweight MVP activity / audit trail (not production security auditing). */
+export type ActivityLogEntry = {
+  id: string;
+  action: ActivityLogAction;
+  title: string;
+  detail?: string;
+  actorName: string;
+  createdAt: string;
+  eventId?: string;
+  clientId?: string;
+  assignmentId?: string;
+  href?: string;
+};
+
 export type Catalog = {
   users: User[];
   readers: ReaderProfile[];
@@ -445,4 +605,10 @@ export type Catalog = {
   expenseLines: ExpenseLine[];
   debriefs: Debrief[];
   notes: OperationalNote[];
+  flights: Flight[];
+  hotelStays: HotelStay[];
+  groundTransfers: GroundTransfer[];
+  tasks: Task[];
+  notifications: AppNotification[];
+  activityLog: ActivityLogEntry[];
 };

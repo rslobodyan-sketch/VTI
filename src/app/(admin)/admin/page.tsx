@@ -12,8 +12,10 @@ import { TextLink } from "@/components/ui/text-link";
 import { formatDate, formatMoney, formatShortDate } from "@/lib/format";
 
 export default function AdminOverviewPage() {
-  const { catalog, queries, profiles } = useOperations();
+  const { catalog, queries, profiles, setTaskStatus } = useOperations();
   const metrics = queries.dashboardMetrics();
+  const openTasks = queries.openTasks();
+  const recentActivity = queries.recentActivityLog(8);
   const incompleteOnboarding = profiles.filter((item) => item.onboardingStatus === "in_progress");
   const upcoming = catalog.events
     .filter((event) => event.status !== "cancelled")
@@ -47,6 +49,9 @@ export default function AdminOverviewPage() {
             </ButtonLink>
             <ButtonLink href="/admin/calendar" variant="secondary" size="sm">
               Open calendar
+            </ButtonLink>
+            <ButtonLink href="/admin/financial" variant="secondary" size="sm">
+              Financial
             </ButtonLink>
           </div>
         }
@@ -109,6 +114,78 @@ export default function AdminOverviewPage() {
             </li>
           ))}
         </ul>
+      </Section>
+
+      <Section
+        title="Open tasks"
+        description="Operational work that should not live in calendar notes."
+      >
+        {openTasks.length ? (
+          <ul className="grid gap-0 border-y border-line">
+            {openTasks.map((task, index) => (
+              <li
+                key={task.id}
+                className={`flex min-h-12 flex-wrap items-center justify-between gap-3 py-2 ${
+                  index < openTasks.length - 1 ? "border-b border-line" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">{task.title}</p>
+                  <p className="text-sm text-ink-muted">
+                    {task.priority} · {task.status}
+                    {task.dueAt ? ` · due ${formatShortDate(task.dueAt)}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {task.eventId ? (
+                    <TextLink href={`/admin/events/${task.eventId}`} className="text-sm">
+                      Event
+                    </TextLink>
+                  ) : null}
+                  {task.status !== "done" ? (
+                    <button
+                      type="button"
+                      className="text-sm text-accent underline-offset-2 hover:underline"
+                      onClick={() => setTaskStatus(task.id, "done")}
+                    >
+                      Mark done
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title="No open tasks" description="New work will appear here as operations change." />
+        )}
+      </Section>
+
+      <Section title="Recent activity" description="MVP activity history for this session and seed demo.">
+        {recentActivity.length ? (
+          <ul className="grid gap-0 border-y border-line text-sm">
+            {recentActivity.map((entry, index) => (
+              <li
+                key={entry.id}
+                className={`flex min-h-11 items-center justify-between gap-3 py-2 ${
+                  index < recentActivity.length - 1 ? "border-b border-line" : ""
+                }`}
+              >
+                <div className="min-w-0">
+                  <p className="font-medium">{entry.title}</p>
+                  <p className="text-ink-muted">
+                    {entry.actorName}
+                    {entry.detail ? ` · ${entry.detail}` : ""}
+                  </p>
+                </div>
+                <span className="shrink-0 tabular-nums text-ink-faint">
+                  {formatShortDate(entry.createdAt)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyState title="No activity yet" description="Operational actions will be recorded here." />
+        )}
       </Section>
 
       <div className="grid gap-6 border-y border-line py-4 sm:grid-cols-3 lg:grid-cols-5">
